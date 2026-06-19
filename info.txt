@@ -1,0 +1,261 @@
+Co by měl HanzAgent skutečně dělat
+
+Například mu napíšeš:
+
+Zase mi mizí místo na disku. Zjisti proč.
+
+Agent sám provede sadu bezpečných kontrol:
+
+df -h
+df -i
+du -xhd1 /
+du -xhd1 /opt
+du -xhd1 /var
+journalctl --disk-usage
+docker system df -v
+docker ps --size
+find /var/lib/docker/containers -name '*-json.log' -printf '%s %p\n'
+lsof +L1
+systemd-cgtop
+ps aux --sort=-%mem
+
+A vrátí například:
+
+Disk se za posledních sedm dní zvětšil o 18 GB.
+
+Hlavní příčiny:
+1. Docker log kontejneru predictionai: 11,4 GB
+2. InfluxDB data: nárůst o 4,8 GB
+3. systemd journal: 1,6 GB
+4. Odstraněný, ale stále otevřený log: 920 MB
+
+Doporučení:
+- nastavit rotaci Docker logů,
+- nastavit retenci InfluxDB,
+- omezit journald na 500 MB,
+- restartovat proces držící odstraněný soubor.
+
+První tři změny vyžadují potvrzení.
+
+Tohle je pro AI vhodná práce: ne jen vypsat čísla, ale spojit výsledky a určit pravděpodobnou příčinu.
+
+Docker není automaticky řešení všeho
+
+HanzHub už má minimálně tyto dockerové kontejnery:
+
+hanzhub_dashboard
+hanzhub_health
+
+A dále jsi na něm řešil:
+
+Pi-hole,
+meteostanici,
+Grafanu,
+InfluxDB,
+LoRa,
+stream server,
+whiteboard,
+Prediction AI,
+různé Python skripty a BLE komunikaci.
+
+Nedával bych automaticky všechno do Dockeru. Docker zlepší izolaci a přehlednost, ale nevyřeší špatně nastavené logování, retenci dat nebo aplikaci, která nekontrolovaně zabírá RAM. Naopak může spotřebu disku skrýt do /var/lib/docker.
+
+Rozumné rozdělení:
+
+Typ služby	Doporučení
+Webové aplikace a API	Docker Compose
+Dashboard, whiteboard, Prediction AI	Docker Compose
+Grafana a InfluxDB	Mohou být v Dockeru, ale s jasnými volumes a retencí
+Pi-hole	Docker možný, ale není nutné migrovat, pokud funguje
+BLE, LoRa a přístup k HW	Často lépe nativní systemd služba
+Jednoduché Python listenery	systemd, případně kontejner podle přístupu k HW
+HanzAgent	Samostatná služba, ideálně mimo kontejnery, které spravuje
+
+Agent by neměl běžet uvnitř stejného Docker prostředí, jehož problémy má diagnostikovat. Nejlepší je:
+
+systemd
+└── hanz-agent.service
+      ├── přístup k Docker socketu pouze přes wrapper
+      ├── čtení systemd/journald
+      ├── přístup k systémovým metrikám
+      └── komunikace s OpenAI API
+Oddělení práce a osobních věcí
+
+Tohle bych bral jako zásadní požadavek.
+
+Každá služba by v inventáři měla mít vlastní kategorii:
+
+services:
+  meteo:
+    category: personal
+    owner: hanz
+    runtime: systemd
+
+  hanzhub-dashboard:
+    category: personal
+    owner: hanz
+    runtime: docker
+
+  prediction-ai:
+    category: personal
+    owner: hanz
+    runtime: docker
+
+  pracovni-sluzba:
+    category: work
+    owner: altisima
+    runtime: docker
+    protected: true
+
+Agent pak dostane jasná pravidla:
+
+Osobní služby:
+- může diagnostikovat,
+- může navrhovat změny,
+- po potvrzení je může upravovat.
+
+Pracovní služby:
+- smí pouze číst stav a logy,
+- nesmí posílat obsah databází nebo konfigurací do AI,
+- nesmí je restartovat, aktualizovat ani migrovat bez výslovného potvrzení.
+
+Ještě čistší by bylo pracovní službu přesunout na jiné RPi, server nebo virtuální stroj. Když to nyní není praktické, alespoň:
+
+vlastní Docker Compose projekt,
+vlastní Linux uživatel,
+vlastní adresář pod /srv/work,
+samostatná Docker síť,
+oddělené volumes,
+oddělené zálohy,
+žádné sdílené .env,
+označení protected.
+Jak bych HanzAgent navrhl
+Režim 1: audit
+
+Zpočátku pouze čtení:
+
+✓ procesy a spotřeba RAM
+✓ zaplnění disku a inode
+✓ velikost adresářů
+✓ Docker kontejnery, images, volumes a logy
+✓ systemd služby
+✓ journald
+✓ otevřené smazané soubory
+✓ teploty a throttling
+✓ síťové porty
+✓ dostupné aktualizace
+✓ růst dat v čase
+
+Žádné mazání, restart ani změna konfigurace.
+
+Režim 2: návrhy
+
+Agent vytvoří konkrétní plán:
+
+1. Omezit Docker logy na 50 MB × 3 soubory.
+2. Nastavit journald SystemMaxUse=500M.
+3. Nastavit InfluxDB retenci na 180 dní.
+4. Převést tři webové aplikace do jednoho Compose projektu.
+5. Nechat BLE listener jako systemd službu.
+Režim 3: opravy po potvrzení
+
+Například:
+
+[Provést]
+- vytvořit zálohu konfigurace,
+- zapsat změnu,
+- validovat konfiguraci,
+- restartovat pouze dotčenou službu,
+- zkontrolovat její stav,
+- při chybě vrátit původní soubor.
+Režim 4: automatická údržba
+
+Později může bez potvrzení:
+
+upozornit při zaplnění disku nad 80 %,
+hledat neobvyklý růst adresářů,
+kontrolovat nefunkční kontejnery,
+hlídat memory leaks,
+vytvářet denní nebo týdenní report,
+restartovat jen předem povolené osobní služby.
+Bezpečná sada nástrojů
+
+Model by neměl mít neomezené:
+
+shell("libovolný příkaz")
+
+Měl by dostat nástroje typu:
+
+get_disk_overview()
+find_disk_growth()
+get_memory_overview()
+get_top_processes()
+get_docker_overview()
+get_container_logs(container, lines)
+get_service_status(service)
+get_service_logs(service, lines)
+propose_cleanup()
+restart_personal_service(service)  # vyžaduje potvrzení
+apply_config_change(change)        # vyžaduje potvrzení
+
+Agents SDK umí nástroje, zaznamenávání jejich volání a přerušení běhu před operací vyžadující schválení. To je pro systémovou správu důležitější než samotná inteligence modelu.
+
+Co bych udělal s existujícím /opt/hanz-agent
+
+Nepřidával bych třetí AI aplikaci. Rozšířil bych stávající projekt:
+
+/opt/hanz-agent/
+├── app/
+│   ├── agent.py
+│   ├── api.py
+│   ├── approvals.py
+│   ├── inventory.py
+│   ├── policy.py
+│   └── tools/
+│       ├── disk.py
+│       ├── memory.py
+│       ├── docker.py
+│       ├── systemd.py
+│       ├── logs.py
+│       └── network.py
+├── config/
+│   ├── services.yaml
+│   └── policy.yaml
+├── data/
+│   ├── metrics.db
+│   ├── conversations.db
+│   └── audit.log
+└── backups/
+
+Současně bych ponechal jeho web na portu 8087, takže na dashboardu dostaneš položku třeba:
+
+Hanz Admin
+AI správce serveru
+Můj doporučený postup
+
+Nejdřív bych vůbec nic nemigroval do Dockeru. První krok musí být inventura:
+
+zjistit všechny systemd služby,
+zjistit všechny kontejnery,
+dohledat poslouchající porty,
+spárovat procesy s adresáři a službami,
+změřit disk, RAM a růst dat,
+označit osobní a pracovní služby,
+vytvořit návrh cílové architektury,
+až potom migrovat jednu službu po druhé.
+
+Výsledek první fáze by byl například:
+
+HanzHub audit
+
+23 systemd služeb třetích stran
+7 Docker kontejnerů
+11 veřejně nebo lokálně poslouchajících aplikací
+4 neidentifikované Python procesy
+3 služby zapisující neomezené logy
+1 pracovní služba smíchaná s osobními daty
+2 databáze bez nastavené retence
+
+Takže ano: na HanzHub můžeš „pustit mě“ v podobě samostatného OpenAI agenta. Už tam máš základ, takže bych ho nepřepisoval naslepo. Udělal bych z něj nejprve read-only diagnostika a inventarizační nástroj; jeho první skutečný úkol by byl kompletní audit současného HanzHubu a nalezení toho, co ti právě teď plní disk a spotřebovává paměť.
+
+Ano, chtel bych i audit. uz si nejsem ani jistý, co tam beží, co je funkční atd... Myslís si, že by jsem mohli vytvorit zatím jednoduchou aplikaci, která pobeží na mem notebooku a bude se moct pripojit via ssh na hanzhub a kukat a zjistovat, co se tam vše deje?

@@ -1,0 +1,179 @@
+# HanzHub inventura služeb
+# Vygenerováno: 2026-06-19T02:43:52.964443+02:00
+# U work služeb nastav protected: true
+
+generated_at: '2026-06-19T02:43:52.964443+02:00'
+host: 192.168.1.5
+note: Auto-generováno z auditu. Uprav category, owner a protected ručně.
+services:
+  predicapp:
+    name: Gold Prediction Hub
+    category: personal
+    owner: hanz
+    runtime: systemd
+    unit: predicapp.service
+    status: running
+    path: /opt/PredicApp
+    port: 8084
+    has_git: true
+    protected: false
+  hanz-agent:
+    name: Hanz Agent (FastAPI + llama)
+    category: personal
+    owner: hanz
+    runtime: systemd
+    unit: hanz-agent.service
+    status: running
+    path: /opt/hanz-agent
+    port: 8087
+    has_git: false
+    protected: false
+  hanz-meteo:
+    name: HanzMeteo Dashboard
+    category: personal
+    owner: hanz
+    runtime: systemd
+    unit: appmeteo.service
+    status: running
+    path: /opt/HanzMeteo
+    port: null
+    has_git: false
+    protected: false
+  meteo-ble:
+    name: Hanz Meteo BLE Receiver
+    category: personal
+    owner: hanz
+    runtime: systemd
+    unit: app-m.service
+    status: running
+    path: /opt/meteo3
+    port: null
+    has_git: false
+    protected: false
+  lora-hub:
+    name: Hanz LoRa Hub
+    category: personal
+    owner: hanz
+    runtime: systemd
+    unit: lora-hub.service
+    status: running
+    path: /opt/lora2
+    port: null
+    has_git: false
+    protected: false
+  stream-server:
+    name: Stream Server Web UI
+    category: personal
+    owner: hanz
+    runtime: systemd
+    unit: stream-web.service
+    status: running
+    path: /opt/stream_server
+    port: 8088
+    has_git: false
+    protected: false
+  whiteboard-hub:
+    name: Whiteboard HUB
+    category: personal
+    owner: hanz
+    runtime: systemd
+    unit: whiteboard-hub.service
+    status: running
+    path: /opt/whiteboard-hub
+    port: 8099
+    has_git: false
+    protected: false
+  planetum-bot:
+    name: Planetum Ticket Bot
+    category: personal
+    owner: hanz
+    runtime: systemd
+    unit: planetum_bot.service
+    status: running
+    path: /opt/bots/planetum
+    port: null
+    has_git: false
+    protected: false
+  pihole:
+    name: Pi-hole FTL
+    category: personal
+    owner: hanz
+    runtime: systemd
+    unit: pihole-FTL.service
+    status: running
+    path: null
+    port: 53
+    has_git: false
+    protected: false
+  cloudflared:
+    name: Cloudflare Tunnel
+    category: personal
+    owner: hanz
+    runtime: systemd
+    unit: cloudflared.service
+    status: running
+    path: null
+    port: null
+    has_git: false
+    protected: false
+  lcd-info:
+    name: LCD Info Panel
+    category: personal
+    owner: hanz
+    runtime: systemd
+    unit: lcd-info.service
+    status: running
+    path: /opt/lcd
+    port: null
+    has_git: false
+    protected: false
+  hanzhub-dashboard:
+    name: HanzHub Dashboard
+    category: personal
+    owner: hanz
+    runtime: docker
+    container: hanzhub_dashboard
+    status: running
+    port: 4001
+    has_git: false
+    protected: false
+  hanzhub-health:
+    name: HanzHub Health
+    category: personal
+    owner: hanz
+    runtime: docker
+    container: hanzhub_health
+    status: running
+    port: null
+    has_git: false
+    protected: false
+  influxdb:
+    name: InfluxDB
+    category: personal
+    owner: hanz
+    runtime: docker
+    container: influxdb
+    status: running
+    port: 8086
+    has_git: false
+    protected: false
+  grafana:
+    name: Grafana
+    category: personal
+    owner: hanz
+    runtime: docker
+    container: grafana
+    status: running
+    port: null
+    has_git: false
+    protected: false
+  caddy:
+    name: Caddy reverse proxy
+    category: personal
+    owner: hanz
+    runtime: docker
+    container: caddy
+    status: running
+    port: 8081
+    has_git: false
+    protected: false

@@ -1,0 +1,132 @@
+# =============================================================================
+# HanzAgent — chování, formát odpovědí a přehled auditu
+# =============================================================================
+# Tento soubor můžeš libovolně upravovat. Po změně restartuj aplikaci.
+# Nové položky v `behaviors` nebo `overview.sections` se načtou automaticky.
+# =============================================================================
+
+agent:
+  name: HanzAgent
+  language: cs
+  server_name: HanzHub
+  server_host: "192.168.1.5"
+
+# Základní role agenta (system prompt pro chat)
+role: |
+  Jsi HanzAgent — AI správce domácího Raspberry Pi serveru „HanzHub“.
+  Pomáháš s diagnostikou, vysvětlením auditu a návrhy řešení v češtině.
+  Nikdy neprovádíš změny sám — jen doporučuješ a čekáš na potvrzení uživatele.
+
+# Doplňující pravidla pro chat — každé se přidá do system promptu
+behaviors:
+  - id: explain_clearly
+    enabled: true
+    prompt: |
+      Vysvětli problém tak, aby tomu rozuměl i ne-programátor.
+      Propojuj data z různých částí auditu (disk + procesy + služby).
+
+  - id: always_propose_fix
+    enabled: true
+    prompt: |
+      U každého problému navrhni konkrétní řešení: co zkontrolovat, co smazat,
+      co nastavit, co restartovat. U destruktivních akcí vždy upozorni na riziko
+      a doporuč zálohu.
+
+  - id: backup_first
+    enabled: true
+    prompt: |
+      Před mazáním souborů, rotací logů nebo úpravou služeb vždy navrhni
+      zálohu (tar, kopie do /mnt, rsync na PC).
+
+  - id: respect_protected
+    enabled: true
+    prompt: |
+      Služby označené v config/services.yaml jako protected: true smíš jen
+      diagnostikovat (read-only). Nerestartuj, nemigruj, neposílej jejich
+      configy ani data do externí AI.
+
+  - id: use_inventory
+    enabled: true
+    prompt: |
+      Respektuj inventuru služeb v config/services.yaml — kategorie personal
+      vs work, porty, cesty a runtime (docker/systemd).
+
+# Formát odpovědí v chatu
+response_format:
+  tone: srozumitelně, věcně, bez zbytečného žargonu
+  language: cs
+  structure:
+    - "Krátké shrnutí (1–2 věty)"
+    - "Hlavní zjištění (odrážky)"
+    - "Doporučené kroky (číslovaný seznam)"
+    - "Rizika / co vyžaduje potvrzení"
+  max_bullets_per_section: 8
+  use_markdown: true
+
+# Popisky závažnosti v přehledu auditu
+severity_labels:
+  critical: "KRITICKÉ"
+  warning: "POZOR"
+  info: "INFO"
+  ok: "OK"
+
+# Verdikty pro rychlý stav (prahy)
+thresholds:
+  disk_warn_percent: 70
+  disk_critical_percent: 85
+  memory_warn_percent: 15
+
+# Sekce panelu „Přehled auditu“ v aplikaci
+# Přidej vlastní sekci s id: custom_* a static_text pro pevný text
+overview:
+  intro: |
+    Tento přehled shrnuje poslední audit do srozumitelné podoby.
+    Technická data jsou v záložce „Technický report“.
+
+  sections:
+    - id: health_snapshot
+      enabled: true
+      title: "Rychlý stav"
+
+    - id: disk
+      enabled: true
+      title: "Disk — co zabírá místo"
+
+    - id: memory
+      enabled: true
+      title: "Paměť — kdo ji žere"
+
+    - id: services
+      enabled: true
+      title: "Co běží"
+
+    - id: findings
+      enabled: true
+      title: "Zjištěné problémy"
+
+    - id: recommendations
+      enabled: true
+      title: "Co dělat dál"
+      # Tlačítka „Zkusit vyřešit“ / „Vyřešit“ jsou v panelu Akce pod přehledem
+
+# Popisky tlačítek u doporučení (panel Akce)
+action_buttons:
+  try_label: "Zkusit vyřešit"
+  fix_label: "Vyřešit"
+  try_mode: |
+    Pouze read-only diagnostika — žádné mazání ani restart.
+  fix_mode: |
+    Plán opravy krok za krokem; destruktivní kroky vyžadují potvrzení.
+
+    # Vlastní statická poznámka — můžeš přidat další sekce stejným stylem
+    - id: custom_reminder
+      enabled: true
+      title: "Připomínka"
+      static_text: |
+        Pi je domácí lab — pracovní služby (pokud existují) označ v
+        config/services.yaml jako protected: true.
+
+# Volitelné: další kontext pro agenta (krátké poznámky)
+context_notes: |
+  Známé služby: dashboard, health, Pi-hole, meteo, Grafana, InfluxDB,
+  LoRa, stream server, whiteboard, PredicApp, hanz-agent, BLE, cloudflared.

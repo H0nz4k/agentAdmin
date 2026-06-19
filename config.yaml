@@ -1,0 +1,17 @@
+ssh:
+  host: "192.168.1.5"
+  user: "hanz"
+  port: 22
+  # Cesta k privátnímu klíči; prázdné = automaticky ~/.ssh/id_ed25519 nebo id_rsa
+  key_path: "C:\\ssh\\id_ed25519"
+  connect_timeout: 20
+  banner_timeout: 30
+
+openai:
+  model: "gpt-4o-mini"
+
+paths:
+  info_file: "info.txt"
+  audits_dir: "data/audits"
+  services_file: "config/services.yaml"
+  agent_file: "config/agent.yaml"

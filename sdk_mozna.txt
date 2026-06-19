@@ -1,0 +1,137 @@
+https://developers.openai.com/apps-sdk tady presto by to neslo?
+
+Podívám se na to přímo podle aktuální dokumentace OpenAI. Klíčové je zjistit, zda Apps SDK umí jen rozhraní v ChatGPT, nebo i bezpečně volat vlastní backend/MCP server, který by pak přes SSH spravoval HanzHub.
+
+Přemýšlení po dobu 27s
+
+Ano — přes Apps SDK by to šlo a pro tvůj případ je to pravděpodobně lepší cesta než současný HanzAgent volající OpenAI přes API klíč.
+
+Apps SDK je postavené nad MCP. Na HanzHubu by běžel vlastní MCP server, který vystaví přesně definované nástroje. ChatGPT by je potom mohl přímo používat v této konverzaci. Uživatelské rozhraní uvnitř ChatGPT je volitelné; pro začátek stačí samotné nástroje.
+
+ChatGPT
+   │
+   │ MCP přes HTTPS
+   ▼
+HanzHub: /mcp
+   │
+   ├── kontrola disku
+   ├── kontrola RAM a procesů
+   ├── Docker diagnostika
+   ├── systemd a journal
+   ├── návrhy optimalizace
+   └── schválené opravné operace
+Co by se tím změnilo
+
+V současném řešení nejspíš funguje:
+
+HanzHub → OpenAI API → odpověď
+
+Přes Apps SDK by to bylo obráceně:
+
+ChatGPT → MCP nástroj na HanzHubu → výsledek zpět do ChatGPT
+
+V této variantě by HanzHub pravděpodobně nemusel používat OpenAI API klíč pro samotné přemýšlení modelu. Model běží v ChatGPT a HanzHub pouze provádí volání MCP nástrojů. API klíč by byl potřeba jen tehdy, kdyby nějaká lokální služba na HanzHubu sama nezávisle volala OpenAI API.
+
+Takže bych v této konverzaci mohl dostat například nástroje:
+
+hanzhub_system_overview
+hanzhub_disk_usage
+hanzhub_find_disk_growth
+hanzhub_memory_processes
+hanzhub_docker_overview
+hanzhub_failed_services
+hanzhub_service_logs
+hanzhub_open_deleted_files
+hanzhub_restart_personal_service
+
+A ty bys napsal:
+
+Zjisti, proč se HanzHubu plní disk.
+
+Já bych přes MCP provedl jednotlivé kontroly, spojil výsledky a odpověděl například:
+
+Za posledních 24 hodin narostl disk o 8,4 GB.
+
+Příčina:
+- Docker JSON log: 5,9 GB
+- journald: 1,4 GB
+- odstraněný soubor stále otevřený Python procesem: 870 MB
+
+Navržená oprava:
+1. nastavit rotaci Docker logu,
+2. omezit journald na 500 MB,
+3. restartovat konkrétní Python službu.
+
+Provést změny?
+
+ChatGPT má u aplikací úrovně oprávnění od „vždy se ptát“ až po automatické provádění běžných změn s potvrzením důležitých zásahů. Nástroje navíc mohou být označeny jako pouze čtecí nebo destruktivní.
+
+HanzHub musí být dostupný přes HTTPS
+
+ChatGPT se nemůže připojit přímo na:
+
+http://192.168.1.3:8087
+
+MCP endpoint musí být dostupný přes HTTPS. Dokumentace podporuje Secure MCP Tunnel, ngrok nebo Cloudflare Tunnel. Do internetu se ale nevystavuje SSH ani celý administrační web — pouze zabezpečený endpoint například:
+
+https://agent.hanzhub.cz/mcp
+
+MCP server běží přímo na HanzHubu, takže diagnostické příkazy provádí lokálně.
+
+Pro osobní data a jakékoli zapisující operace OpenAI doporučuje autentizaci přes OAuth 2.1. Samotné „tajné URL“ by pro správu serveru nebylo dostatečné zabezpečení.
+
+Pracovní službu oddělíme politikou
+
+Na HanzHubu bychom měli například:
+
+services:
+  meteo:
+    scope: personal
+    allow_restart: true
+    allow_config_change: true
+
+  hanz-dashboard:
+    scope: personal
+    allow_restart: true
+
+  work-service:
+    scope: work
+    protected: true
+    allow_restart: false
+    allow_read_logs: false
+    allow_send_content_to_model: false
+
+Toto omezení musí vynucovat MCP server, nikoli pouze instrukce pro AI. Model by tedy ani technicky nemohl přečíst pracovní konfiguraci, .env, databázi nebo restartovat chráněnou službu.
+
+Co Apps SDK samo nevyřeší
+
+Apps SDK ti umožní, abych HanzHub ovládal během konverzace. Není to samo o sobě nepřetržitý watchdog, který běží, když je ChatGPT zavřený.
+
+Pro průběžný dohled bychom vedle MCP serveru nechali malou lokální službu:
+
+systemd timer / watchdog
+   ├── každou hodinu uloží stav disku a RAM
+   ├── sleduje růst adresářů
+   ├── kontroluje kontejnery
+   └── zapisuje historii do SQLite
+
+Apps SDK by mi potom umožnilo tuto historii přečíst a analyzovat:
+
+Co se na disku změnilo za poslední týden?
+
+To je lepší než pokaždé vidět jen aktuální stav.
+
+Důležitá poznámka k tvému Plus účtu
+
+Aktuální dokumentace OpenAI není v dostupnosti zcela jednotná. Dokumentace Apps SDK uvádí podporu aplikací na všech plánech a popisuje oprávnění pro osobní účty, zatímco článek podpory uvádí plnou podporu vlastních MCP aplikací s write operacemi jako beta funkci především pro Business a Enterprise/Edu.
+
+Rozhodující je, jestli ve svém ChatGPT vidíš:
+
+Nastavení
+→ Apps & Connectors
+→ Advanced settings
+→ Developer mode
+
+a následně tlačítko Create pro vlastní aplikaci. Jestli tam tuto možnost máš, můžeme HanzHub připojit přímo. Jestli zatím chybí, lze stejný MCP server testovat pomocí MCP Inspectoru nebo API Playgroundu a později jej jen připojit do ChatGPT.
+
+Takže ano: Apps SDK je přesně technologie, přes kterou můžeš „pustit mě“ na HanzHub — bezpečněji a přirozeněji než přes samostatný chat používající API klíč. Začal bych čistě read-only MCP serverem pro kompletní audit disku, RAM, Dockeru, systemd služeb a portů; opravné nástroje bych přidal až po ověření diagnostiky.

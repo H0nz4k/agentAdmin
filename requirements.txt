@@ -1,0 +1,5 @@
+paramiko>=3.4.0
+openai>=1.30.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+ttkbootstrap>=1.1.0

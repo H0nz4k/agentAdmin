@@ -2,6 +2,12 @@
 
 Všechny důležité změny v projektu Agent Admin (dříve HanzHub Audit) jsou zaznamenány v tomto souboru.
 
+## [1.4.1] - 2026-06-19
+### Přidáno
+- **Deploy na Pi:** `scripts/deploy_pi.py` a `scripts/deploy-to-pi.ps1` — nahrání balíčku přes SSH a instalace do `/opt/agentAdmin`.
+- **`scripts/pi/`** — složka pro vlastní skripty, které deploy zkopíruje na malinu.
+- **`pi-install-agentAdmin.sh`** — kompletní instalace ze staging adresáře (volá se z deploye).
+
 ## [1.4.0] - 2026-06-19
 ### Přidáno
 - **Souborové nástroje s validací:** `read_file`, `write_file`, `delete_file` — whitelist v `config/permissions.yaml` → `file_paths`; zápis (úroveň 2) a mazání (úroveň 3) vyžadují potvrzení v GUI.

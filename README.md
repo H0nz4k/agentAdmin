@@ -28,6 +28,36 @@ Nebo viz [hanz-agent-tools-v1/README.md](hanz-agent-tools-v1/README.md).
 
 **Poznámka:** `/opt/hanz-agent` se nepoužívá — hanz-agent služba je mimo provoz.
 
+## Deploy na Raspberry Pi (doporučeno)
+
+Desktopová aplikace běží na PC. Na Pi jde jen balíček skriptů — deploy z PowerShellu:
+
+```powershell
+# V kořeni projektu, Pi musí být na síti a SSH fungovat (config.yaml)
+.\scripts\deploy-to-pi.ps1
+```
+
+Nebo přímo:
+
+```powershell
+.venv\Scripts\python scripts\deploy_pi.py
+```
+
+Co deploy udělá:
+1. Sestaví balíček z `hanz-agent-tools-v1/` (+ volitelně `scripts/pi/`).
+2. Nahraje ho přes SSH do `~/agentAdmin-staging`.
+3. Spustí `sudo bash install.sh` → `/opt/agentAdmin/tools` a `/etc/agentAdmin`.
+
+**Požadavky na Pi:** uživatel `hanz` musí mít `sudo` (ideálně bez hesla pro tento skript). Ověř: `ssh hanz@192.168.1.5`.
+
+Dry-run (jen lokální sestavení, bez nahrání):
+
+```powershell
+.venv\Scripts\python scripts\deploy_pi.py --dry-run
+```
+
+Po deployi agent v GUI volá skripty z `/opt/agentAdmin/tools/scripts/`.
+
 ## Instalace a spuštění
 
 ### 1. Příprava prostředí

@@ -1,0 +1,489 @@
+Pro HanzHub bych vytvořil samostatnou vrstvu Hanz Memory:
+
+ChatGPT / HanzAgent
+        │
+        ▼
+MCP nástroje pro paměť
+        │
+        ├── strukturovaná fakta a vztahy
+        ├── incidenty a provedené změny
+        ├── návody a rozhodnutí
+        ├── fulltextové vyhledávání
+        └── později významové vyhledávání
+
+Apps SDK/MCP je pro toto vhodné, protože paměť může být vystavená jako samostatné nástroje a zdroje, které ChatGPT použije podle potřeby.
+
+Co bych použil na HanzHubu
+První verze: SQLite + FTS5
+
+Na začátek bych použil:
+
+SQLite jako hlavní databázi,
+FTS5 pro rychlé fulltextové hledání,
+menší Markdown dokumenty pro lidské čtení,
+soubory a diagnostické výstupy uložené odděleně,
+existující InfluxDB pouze pro časové metriky.
+
+FTS5 je přímo fulltextový modul SQLite určený k efektivnímu hledání v kolekci dokumentů.
+
+Výhody pro HanzHub:
+
+malá spotřeba RAM,
+žádná další databázová služba,
+jednoduchá záloha jednoho databázového souboru,
+dostatečný výkon pro desetitisíce až statisíce poznatků,
+snadné napojení z Pythonu,
+není potřeba hned provozovat další Docker stack.
+
+Až kdyby paměť výrazně narostla nebo ji používalo více aplikací současně, šlo by přejít na PostgreSQL. PostgreSQL má vlastní fulltextové vyhledávání a pgvector umožňuje ukládat vektory vedle běžných relačních dat a provádět významové hledání.
+
+Paměť nemá být jen text
+
+Rozdělil bych ji na několik typů informací.
+
+1. Entity – co v systému existuje
+
+Například:
+
+HUB
+PredicApp
+hanz-agent
+hanzhub_dashboard
+InfluxDB
+Grafana
+/opt/PredicApp/backups
+/var/lib/docker
+port 8087
+
+Každá entita dostane:
+
+id: service.predicapp
+type: service
+name: PredicApp
+scope: personal
+status: active
+host: HUB
+last_verified: 2026-06-19T03:00:00+02:00
+
+Typy entit mohou být:
+
+host,
+služba,
+systemd jednotka,
+Docker kontejner,
+databáze,
+adresář,
+konfigurační soubor,
+port,
+uživatel,
+projekt,
+záloha.
+2. Vztahy – co s čím souvisí
+
+Toto je zásadní pro skutečnou „globální paměť“.
+
+PredicApp
+  ├── běží_na → HUB
+  ├── ukládá_do → /opt/PredicApp
+  ├── vytváří_zálohy_v → /opt/PredicApp/backups
+  ├── používá → predictapp.db
+  └── závisí_na → konkrétní službě
+
+V databázi:
+
+source: service.predicapp
+relation: writes_to
+target: path.predicapp_backups
+
+Další vztahy:
+
+runs_on
+depends_on
+writes_to
+reads_from
+exposes_port
+configured_by
+backed_up_by
+monitored_by
+restarted_by
+owned_by
+replaces
+
+Není kvůli tomu nutné hned instalovat Neo4j. Pro začátek stačí jednoduchá relační tabulka relations.
+
+3. Fakta
+
+Například:
+
+subject: path.predicapp_backups
+property: observed_size
+value: 27
+unit: GB
+observed_at: 2026-05-06
+source: command.du
+confidence: verified
+
+Nebo:
+
+subject: docker.container.44214a15c21b
+property: json_log_size
+value: 4365883123
+unit: bytes
+observed_at: 2026-05-18
+source: filesystem_scan
+confidence: verified
+
+To jsou přesně poznatky, které jsme už na HanzHubu získali:
+
+/opt/PredicApp/backups měl přibližně 27 GB,
+jeden Docker JSON log měl přibližně 4,3 GB.
+
+Příště už agent nemusí začínat od nuly. Vyhledá předchozí incident a porovná, zda se problém opakuje.
+
+4. Incidenty
+
+Každý problém bych ukládal jako samostatný incident:
+
+id: incident.2026-05-docker-log-growth
+title: Nekontrolovaný růst Docker JSON logu
+host: HUB
+symptoms:
+  - rychle ubývající místo na disku
+cause:
+  - kontejner zapisoval log bez rotace
+affected_entities:
+  - docker.container.44214a15c21b
+  - path.var_lib_docker
+resolution:
+  - nastavit rotaci Docker logu
+verification:
+  - velikost logu po zásahu
+  - stav kontejneru
+  - aplikační health check
+status: resolved
+
+Při novém zaplnění disku agent nejprve vyhledá podobné incidenty:
+
+Tento symptom se podobá incidentu z 18. května 2026, kdy Docker JSON log narostl na 4,3 GB.
+
+5. Provedené změny
+
+Každý zásah musí mít historii:
+
+change_id: change.2026-06-19-001
+target: service.predicapp
+action: update_backup_retention
+before:
+  retention_count: unlimited
+after:
+  retention_count: 7
+backup_id: backup.2026-06-19-001
+rollback:
+  method: restore_config
+health_check:
+  result: passed
+performed_by: hanz-agent
+approved_by: user
+
+Díky tomu bude možné zjistit:
+
+co bylo změněno,
+proč,
+jaký byl původní stav,
+zda existovala záloha,
+jak proběhlo ověření,
+zda lze změnu vrátit.
+6. Návody a runbooky
+
+Tady jsou malé Markdown dokumenty naopak vhodné:
+
+knowledge/
+├── services/
+│   ├── predicapp.md
+│   ├── hanz-agent.md
+│   ├── grafana.md
+│   └── influxdb.md
+├── runbooks/
+│   ├── disk-full.md
+│   ├── docker-log-growth.md
+│   ├── high-memory-usage.md
+│   └── service-wont-start.md
+├── architecture/
+│   ├── network.md
+│   ├── storage.md
+│   └── service-map.md
+└── decisions/
+    ├── 2026-06-agent-memory.md
+    └── 2026-06-docker-strategy.md
+
+Jeden dokument by měl řešit jedno téma. Databáze si uloží jeho název, obsah, tagy a vztahy k entitám.
+
+Markdown může být verzovaný přes Git. Databázi ani tajné hodnoty bych do Gitu neukládal.
+
+Praktické uložení
+
+Dodržel bych standardní rozdělení Linuxu:
+
+/opt/hanz-agent/
+└── aplikační kód
+
+/etc/hanz-agent/
+├── policy.yaml
+├── services.yaml
+└── memory-policy.yaml
+
+/var/lib/hanz-agent/
+├── memory/
+│   ├── personal.db
+│   └── work.db
+├── knowledge/
+│   ├── personal/
+│   └── work/
+├── artifacts/
+│   ├── command-output/
+│   ├── config-snapshots/
+│   └── incident-evidence/
+└── backups/
+
+/var/log/hanz-agent/
+└── audit.jsonl
+Osobní a pracovní paměť oddělit fyzicky
+
+Protože nechceš míchat osobní a pracovní věci, nedal bych je pouze do jedné tabulky se sloupcem scope.
+
+Použil bych minimálně dvě databáze:
+
+personal.db
+work.db
+
+Výchozí chování:
+
+ChatGPT / agent:
+  personal.db → přístup povolen
+
+  work.db:
+    → standardně nepřístupná
+    → pouze explicitní jednorázové oprávnění
+    → žádné automatické odesílání obsahu modelu
+
+Ideálně také:
+
+jiné souborové oprávnění,
+jiný šifrovací klíč,
+samostatné zálohy,
+oddělené adresáře s dokumenty,
+oddělené MCP nástroje.
+
+Například:
+
+memory_search_personal
+memory_search_work
+
+Nástroj memory_search_work by byl normálně zakázaný.
+
+Globální paměť tedy nemusí znamenat jednu databázi. Znamená společné rozhraní, které ví, kde hledat, ale respektuje hranice.
+
+Jak má probíhat ukládání poznatku
+
+Agent by neměl automaticky ukládat každou větu jako pravdu.
+
+Použil bych tento postup:
+
+Pozorování
+   ↓
+Kandidát na poznatek
+   ↓
+Kontrola zdroje
+   ↓
+Potvrzení nebo automatická verifikace
+   ↓
+Uložení jako platné fakta
+   ↓
+Propojení s entitami a incidenty
+
+Například:
+
+Pozorování:
+Proces python3 používá 1,8 GB RAM.
+
+Špatně uložený závěr:
+Python má memory leak.
+
+Správně:
+Ověřené fakta:
+- proces PID 1234 používal 1,8 GB RAM v 03:15,
+- patřil službě meteo.service,
+- spotřeba rostla během posledních šesti hodin.
+
+Hypotéza:
+- možný memory leak.
+
+Stav hypotézy:
+- nepotvrzeno.
+
+Paměť musí rozlišovat:
+
+pozorování,
+hypotézu,
+ověřené fakta,
+rozhodnutí,
+provedenou změnu.
+Povinná metadata každého poznatku
+
+Každý záznam by měl obsahovat:
+
+scope: personal
+source: system_command
+source_reference: "systemctl status hanz-agent"
+created_at: 2026-06-19T03:30:00+02:00
+last_verified_at: 2026-06-19T03:30:00+02:00
+confidence: verified
+status: active
+sensitivity: internal
+created_by: hanz-agent
+
+Dále je dobré mít:
+
+valid_from
+valid_to
+supersedes
+contradicts
+expires_at
+
+Když se port služby změní z 8087 na 8090, starý poznatek se nemá smazat ani tiše přepsat:
+
+Starý záznam:
+port 8087
+valid_to: 2026-07-01
+status: superseded
+
+Nový záznam:
+port 8090
+valid_from: 2026-07-01
+
+Tak bude možné zjistit nejen aktuální stav, ale i historii.
+
+Jak v tom hledat
+
+Použil bych postupně tři vrstvy.
+
+1. Přesné filtry
+Najdi všechny aktivní Docker služby.
+Najdi osobní služby zapisující do /var/lib/docker.
+Najdi změny provedené minulý týden.
+Najdi služby závislé na InfluxDB.
+
+To řeší SQL a vztahy.
+
+2. Fulltext
+plnění disku
+Docker log
+PredicApp zálohy
+memory leak
+Grafana nenaběhla
+
+To řeší SQLite FTS5.
+
+3. Významové hledání
+
+Později bude možné vyhledat:
+
+Kdy jsme řešili něco podobného, kdy služba pomalu spotřebovávala úložiště?
+
+I když v původním incidentu nebyla přesná slova „pomalu spotřebovávala úložiště“, vektorové vyhledávání najde významově podobný text.
+
+To bych ale přidal až jako druhou fázi. U pracovních dat bych bez zvláštního schválení nevytvářel embeddingy přes externí API. Osobní a sanitizované texty lze indexovat samostatně.
+
+MCP nástroje pro paměť
+
+Agent by neměl dostat přímý SQL přístup. Dostal by konkrétní nástroje:
+
+memory_search(query, scope, entity_type)
+memory_get_entity(entity_id)
+memory_get_dependencies(entity_id)
+memory_get_recent_incidents(entity_id)
+memory_get_runbook(topic)
+
+memory_propose_fact(...)
+memory_confirm_fact(candidate_id)
+memory_record_incident(...)
+memory_record_change(...)
+memory_mark_superseded(...)
+
+Důležité rozdělení:
+
+memory_search
+memory_get_*
+
+jsou read-only.
+
+memory_propose_fact
+
+pouze vytvoří návrh.
+
+memory_confirm_fact
+memory_mark_superseded
+
+jsou zapisující a podléhají pravidlům.
+
+Žádný nástroj:
+
+execute_sql(sql)
+Jak by to vypadalo při běžné práci
+
+Ty napíšeš:
+
+Zjisti, proč se zase plní disk.
+
+Agent:
+
+vyhledá starší incidenty s diskem,
+načte mapu služeb a adresářů,
+provede aktuální diagnostiku,
+porovná současný stav s historií,
+určí pravděpodobnou příčinu,
+navrhne opravu,
+po zásahu uloží incident, změnu a výsledek kontroly.
+
+Výstup:
+
+Aktuální příčina:
+PredicApp zálohy opět narostly na 31 GB.
+
+Souvislost:
+Stejný adresář měl 6. května 2026 přibližně 27 GB.
+
+Pravděpodobný důvod:
+Retenční pravidlo nebylo nastaveno nebo přestalo fungovat.
+
+Doporučení:
+1. ověřit zálohy,
+2. zachovat posledních sedm validních kopií,
+3. otestovat obnovu,
+4. teprve potom odstranit starší kopie,
+5. přidat kontrolu růstu adresáře.
+
+Po vyřešení přibude do paměti:
+
+nový incident,
+potvrzená příčina,
+provedená změna,
+záloha,
+rollback,
+health check,
+aktualizovaný runbook.
+Co bych nasadil jako první
+
+Pro HanzHub bych zvolil:
+
+SQLite + FTS5
+relační tabulky entit a vztahů
+menší Markdown runbooky
+oddělené personal.db a work.db
+InfluxDB pro metriky
+MCP nástroje pro přístup
+denní zálohu databáze
+
+Vektorové vyhledávání bych zatím nechal jako připravenou druhou fázi. Největší hodnotu nejprve přinese správná struktura, zdroje, časová platnost a propojení služeb — ne samotné embeddingy.
+
+Výsledkem nebude jen archiv konverzací, ale skutečná provozní paměť HanzHubu: co existuje, kde to běží, na čem to závisí, co se v minulosti pokazilo, jak se to opravilo, co bylo změněno a jak to případně vrátit.

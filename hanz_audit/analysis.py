@@ -279,6 +279,25 @@ def analyze(result: AuditResult) -> AnalysisResult:
             )
         )
 
+    mem_hogs = list(_parse_mem_hogs(mem_ps, 15))
+    if mem_hogs and mem_hogs[0][1] >= 15:
+        _user, top_pct, top_cmd = mem_hogs[0]
+        short_cmd = top_cmd[:100] if top_cmd else "?"
+        out.recommendations.append(
+            Recommendation(
+                2,
+                f"Vysoká RAM — {top_pct:.0f} % ({short_cmd})",
+                "Zjisti, proč proces spotřebovává tolik paměti, a navrhni bezpečnou optimalizaci.",
+                [
+                    "free -h && ps aux --sort=-%mem | head -10",
+                    "Porovnej RSS vs VSZ — leak vs normální cache.",
+                    "systemctl status <služba> — kolik paměti hlásí systemd.",
+                    "Docker: docker stats --no-stream (pokud jde o kontejner).",
+                ],
+                requires_confirmation=False,
+            )
+        )
+
     if hanz_agent_du or any("hanz-agent" in c for _, _, c in _parse_mem_hogs(mem_ps, 10)):
         out.recommendations.append(
             Recommendation(

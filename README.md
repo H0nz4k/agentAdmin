@@ -1,17 +1,32 @@
-# HanzHub Audit & Agent
+# Agent Admin (HanzHub Audit)
 
-Aplikace pro bezpečný audit, diagnostiku a správu domácího Raspberry Pi serveru (HanzHub) pomocí AI.
+Desktopová aplikace pro audit, diagnostiku a správu domácího Raspberry Pi (HanzHub) pomocí AI.
 
-Aplikace běží lokálně na tvém počítači, připojuje se k serveru přes SSH (pouze pro čtení) a využívá OpenAI API pro analýzu dat, vysvětlení problémů a návrhy řešení.
+Běží lokálně na tvém PC, připojuje se přes SSH a využívá OpenAI API. Zápis na Pi (služby, soubory, cache) je vždy řízený whitelistem v `config/permissions.yaml` — citlivé akce potvrzuješ v dialogu.
+
+**Verze:** viz `hanz_audit/version.py` a [CHANGELOG.md](CHANGELOG.md).
 
 ## Funkce
 
-- **Bezpečný read-only audit:** Sbírá data o disku, RAM, Docker kontejnerech, systemd službách a síťových portech bez provádění změn.
-- **AI Analýza:** Automaticky vyhodnocuje výsledky auditu, hledá anomálie (např. obří logy, memory leaky) a navrhuje konkrétní kroky k nápravě.
-- **Moderní GUI:** Postavené na `ttkbootstrap` pro čistý a přehledný vzhled.
-- **Interaktivní chat:** Můžeš se AI ptát na detaily auditu nebo požádat o plán opravy.
-- **Akční tlačítka:** U každého doporučení můžeš jedním kliknutím spustit hlubší diagnostiku nebo požádat o plán řešení ("Zkusit vyřešit" / "Vyřešit").
-- **Inventura služeb:** Automaticky mapuje běžící služby a ukládá je do `config/services.yaml`.
+- **Audit:** disk, RAM, Docker, systemd, porty.
+- **AI chat s nástroji:** agent tyká, mluví jako profík/kámoš; při SSH spouští tools místo popisu příkazů.
+- **Soubory na Pi:** `read_file`, `write_file`, `delete_file` jen na whitelistu `file_paths` — zápis a mazání vyžadují tvé potvrzení.
+- **Knihovna nástrojů:** `config/custom_tools.yaml` + balíček `hanz-agent-tools-v1` (skripty na Pi v `/opt/agentAdmin/tools`).
+- **Agent konzole:** live log SSH příkazů.
+- **Inventura služeb:** `config/services.yaml`.
+
+## Instalace skriptů na Pi
+
+```bash
+# Na Raspberry Pi — připraví /opt/agentAdmin a /etc/agentAdmin
+sudo bash scripts/pi-install-agentAdmin.sh
+sudo cp -a hanz-agent-tools-v1/scripts /opt/agentAdmin/tools/
+sudo cp hanz-agent-tools-v1/config/* /etc/agentAdmin/
+```
+
+Nebo viz [hanz-agent-tools-v1/README.md](hanz-agent-tools-v1/README.md).
+
+**Poznámka:** `/opt/hanz-agent` se nepoužívá — hanz-agent služba je mimo provoz.
 
 ## Instalace a spuštění
 
@@ -77,4 +92,6 @@ Chování agenta, formát odpovědí a vzhled přehledu můžeš upravit v soubo
   - `agent.yaml` - Chování AI a formát reportů
   - `services.yaml` - Automaticky generovaná inventura
 - `data/audits/` - Zde se automaticky ukládají Markdown reporty z každého auditu
-- `info.txt` - Tvoje osobní poznámky, které AI čte pro lepší kontext
+- `config/permissions.yaml` - Whitelist nástrojů, cest pro soubory a cache
+- `scripts/pi-install-agentAdmin.sh` - Příprava `/opt/agentAdmin` na Pi
+- `hanz-agent-tools-v1/` - Skriptový balíček nástrojů (instalace do `/opt/agentAdmin/tools`)

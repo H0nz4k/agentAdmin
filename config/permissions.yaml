@@ -1,0 +1,114 @@
+# Oprávnění Agent Admin — vynuceno v kódu, ne jen v promptu
+# Viz chovani_agenta.txt pro principy
+
+policy:
+  max_writes_per_session: 5
+  max_restarts_per_session: 3
+  remote_disable_file: /etc/agentAdmin/disable-writes
+  backup_dir: /opt/agentAdmin/backups
+  log_max_lines: 200
+  command_timeout_seconds: 120
+
+# Úroveň 1 — vratné, u personal služeb bez potvrzení (pokud není protected)
+level_1_tools:
+  - restart_service
+  - stop_service
+  - start_service
+  - enable_service
+  - restart_docker_container
+  - docker_prune_dangling
+  - backup_service_config
+  - prune_cache
+
+# Úroveň 2 — vyžaduje potvrzení v GUI
+level_2_tools:
+  - docker_system_prune
+  - journal_vacuum
+  - prune_old_backups
+  - disable_service
+  - delete_dangling_docker_images_by_name
+  - write_file
+
+# Úroveň 3 — vyžaduje přesnou frázi
+level_3_tools:
+  - delete_files
+  - delete_file
+
+# Whitelist cache — pouze tyto cesty smí prune_cache
+cache_paths:
+  - id: predicapp_pycache
+    path: /opt/PredicApp
+    find: "-name __pycache__ -type d"
+    description: Python __pycache__ v PredicApp
+  - id: predicapp_pyc
+    path: /opt/PredicApp
+    find: "-name '*.pyc' -type f"
+    description: Zkompilované .pyc soubory v PredicApp
+  - id: docker_build_cache
+    path: /var/lib/docker
+    find: ""
+    description: Docker build cache (použij docker builder prune)
+
+# Zálohovatelné konfigurace (tar před změnou)
+config_backup_paths:
+  - id: predicapp_env
+    path: /opt/PredicApp/.env
+  - id: cloudflared_service
+    path: /etc/systemd/system/cloudflared.service
+  - id: agentadmin_config
+    path: /opt/agentAdmin/config
+
+# Soubory — read / write / delete jen na whitelistu (write=úroveň 2, delete=úroveň 3)
+file_paths:
+  - id: agentadmin_scripts
+    path: /opt/agentAdmin/scripts
+    allow_read: true
+    allow_write: true
+    allow_delete: true
+    max_bytes: 262144
+    description: Vlastní skripty agentAdmin
+  - id: agentadmin_config
+    path: /opt/agentAdmin/config
+    allow_read: true
+    allow_write: true
+    allow_delete: false
+    max_bytes: 131072
+    description: Konfigurace agentAdmin
+  - id: agentadmin_tools
+    path: /opt/agentAdmin/tools
+    allow_read: true
+    allow_write: false
+    allow_delete: false
+    max_bytes: 262144
+    description: Nainstalované nástroje (read-only z GUI)
+  - id: predicapp_env
+    path: /opt/PredicApp/.env
+    is_file: true
+    allow_read: true
+    allow_write: true
+    allow_delete: false
+    max_bytes: 65536
+    description: Env soubor PredicApp — před zápisem doporuč backup_service_config
+
+# Mazání — pouze tyto patterny (level 3)
+delete_whitelist:
+  - id: predicapp_old_db_backups
+    path: /opt/PredicApp/backups
+    pattern: "predictapp_*.db"
+    min_age_days: 30
+    description: Staré DB zálohy PredicApp (>30 dní)
+
+# Zakázané vzory — nikdy neprovádět
+forbidden_patterns:
+  - "rm -rf /"
+  - "rm -rf /*"
+  - "mkfs"
+  - "dd if="
+  - "chmod -R 777 /"
+  - ":(){ :|:& };:"
+  - "> /dev/sd"
+  - "wget.*\\|.*sh"
+  - "curl.*\\|.*bash"
+  - "eval "
+  - "sudo su"
+  - "NOPASSWD"

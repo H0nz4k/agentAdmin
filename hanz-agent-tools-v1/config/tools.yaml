@@ -1,0 +1,535 @@
+﻿version: 1
+name: HanzAgent base tool registry
+defaults:
+  timeout_seconds: 30
+  max_output_bytes: 200000
+  scope: personal
+  audit: true
+  enabled: true
+risk_levels:
+  read_only: Nemění systém. Může běžet bez potvrzení.
+  reversible: Vratná změna. Vyžaduje potvrzení a následný health check.
+  destructive: Může odstranit data nebo způsobit výpadek. Vyžaduje přesné potvrzení cíle.
+  forbidden: Nástroj se nesmí registrovat ani spustit.
+tool_install_policy:
+  agent_may_propose: true
+  agent_may_activate: false
+  activation_requires_user_confirmation: true
+  confirmation_must_include:
+  - tool_id
+  - exact_script_sha256
+  - risk_level
+  - required_privileges
+  staging_directory: /var/lib/agentAdmin/pending-tools
+  active_directory: /opt/agentAdmin/tools
+  audit_required: true
+tools:
+- id: system.overview
+  label: Přehled systému
+  description: Zobrazí host, kernel, uptime, load, RAM, root filesystem, inode a teplotu. Používej jako první diagnostický
+    krok.
+  category: system
+  handler:
+    type: script
+    path: scripts/read/system_overview.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 30
+  inputs: []
+  postconditions: []
+  audit: true
+- id: disk.overview
+  label: Přehled disku
+  description: Zobrazí filesystemy, inode, velikost journald a souhrn úložiště Dockeru.
+  category: storage
+  handler:
+    type: script
+    path: scripts/read/disk_overview.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 30
+  inputs: []
+  postconditions: []
+  audit: true
+- id: disk.top
+  label: Největší adresáře
+  description: Najde největší adresáře uvnitř povoleného kořene. Nemění data.
+  category: storage
+  handler:
+    type: script
+    path: scripts/read/disk_top.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 120
+  inputs:
+  - name: path
+    type: path
+    required: true
+  - name: depth
+    type: integer
+    min: 0
+    max: 4
+    default: 2
+  postconditions: []
+  audit: true
+- id: disk.large_files
+  label: Velké soubory
+  description: Najde velké soubory uvnitř povoleného kořene a vypíše velikost, čas změny a cestu.
+  category: storage
+  handler:
+    type: script
+    path: scripts/read/large_files.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 120
+  inputs:
+  - name: path
+    type: path
+    required: true
+  - name: min_mib
+    type: integer
+    min: 1
+    max: 100000
+    default: 100
+  postconditions: []
+  audit: true
+- id: disk.open_deleted
+  label: Otevřené smazané soubory
+  description: Najde smazané soubory, které stále drží běžící proces a proto dál zabírají disk.
+  category: storage
+  handler:
+    type: script
+    path: scripts/read/open_deleted_files.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 30
+  inputs: []
+  postconditions: []
+  audit: true
+- id: memory.overview
+  label: Přehled paměti
+  description: Zobrazí RAM, swap, pressure metriky a procesy s nejvyšším RSS.
+  category: memory
+  handler:
+    type: script
+    path: scripts/read/memory_overview.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 30
+  inputs: []
+  postconditions: []
+  audit: true
+- id: process.details
+  label: Detail procesu
+  description: Zobrazí parametry, cgroup, limity a paměť konkrétního PID.
+  category: memory
+  handler:
+    type: script
+    path: scripts/read/process_details.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 30
+  inputs:
+  - name: pid
+    type: integer
+    min: 1
+    required: true
+  postconditions: []
+  audit: true
+- id: service.failed
+  label: Selhané služby
+  description: Zobrazí všechny systemd služby ve stavu failed.
+  category: systemd
+  handler:
+    type: script
+    path: scripts/read/failed_services.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 30
+  inputs: []
+  postconditions: []
+  audit: true
+- id: service.status
+  label: Stav služby
+  description: Zobrazí stav pouze služby z read allowlistu.
+  category: systemd
+  handler:
+    type: script
+    path: scripts/read/service_status.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 30
+  inputs:
+  - name: service
+    type: allowlist
+    source: allowed-services.txt
+    required: true
+  postconditions: []
+  audit: true
+- id: service.logs
+  label: Log služby
+  description: Zobrazí omezený počet posledních řádků journald pouze pro službu z allowlistu.
+  category: systemd
+  handler:
+    type: script
+    path: scripts/read/service_logs.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 30
+  inputs:
+  - name: service
+    type: allowlist
+    source: allowed-services.txt
+    required: true
+  - name: lines
+    type: integer
+    min: 1
+    max: 1000
+    default: 200
+  postconditions: []
+  audit: true
+- id: docker.overview
+  label: Přehled Dockeru
+  description: Zobrazí kontejnery, jejich stav, využití zdrojů a spotřebu diskového prostoru.
+  category: docker
+  handler:
+    type: script
+    path: scripts/read/docker_overview.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 60
+  inputs: []
+  postconditions: []
+  audit: true
+- id: docker.logs
+  label: Log kontejneru
+  description: Zobrazí omezený konec logu pouze pro kontejner z allowlistu.
+  category: docker
+  handler:
+    type: script
+    path: scripts/read/docker_logs.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 30
+  inputs:
+  - name: container
+    type: allowlist
+    source: allowed-containers.txt
+    required: true
+  - name: lines
+    type: integer
+    min: 1
+    max: 1000
+    default: 200
+  postconditions: []
+  audit: true
+- id: docker.log_sizes
+  label: Velikosti Docker logů
+  description: Zobrazí skutečné velikosti JSON logů jednotlivých kontejnerů.
+  category: docker
+  handler:
+    type: script
+    path: scripts/read/docker_log_sizes.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 30
+  inputs: []
+  postconditions: []
+  audit: true
+- id: network.overview
+  label: Přehled sítě
+  description: Zobrazí IP adresy, routy, DNS a poslouchající porty.
+  category: network
+  handler:
+    type: script
+    path: scripts/read/network_overview.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 30
+  inputs: []
+  postconditions: []
+  audit: true
+- id: packages.updates
+  label: Dostupné aktualizace
+  description: Simuluje upgrade a vypíše balíčky, které by se aktualizovaly. Nic neinstaluje.
+  category: packages
+  handler:
+    type: script
+    path: scripts/read/package_updates.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 60
+  inputs: []
+  postconditions: []
+  audit: true
+- id: security.snapshot
+  label: Bezpečnostní snímek
+  description: Zobrazí SSH listener, neúspěšná přihlášení za 24 hodin a stav firewallu. Výstup může obsahovat IP adresy.
+  category: security
+  handler:
+    type: script
+    path: scripts/read/security_snapshot.sh
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  timeout_seconds: 30
+  inputs: []
+  postconditions: []
+  audit: true
+- id: backup.path
+  label: Záloha cesty
+  description: Vytvoří ověřený tar.gz archiv povolené cesty, zkontroluje jeho čitelnost a uloží SHA-256.
+  category: backup
+  handler:
+    type: script
+    path: scripts/write/backup_path.sh
+  risk: reversible
+  approval: always
+  enabled: true
+  requires_sudo: true
+  timeout_seconds: 600
+  inputs:
+  - name: path
+    type: allowlist_path
+    source: allowed-backup-paths.txt
+    required: true
+  - name: change_id
+    type: string
+    pattern: ^change-[A-Za-z0-9_.:-]+$
+    required: true
+  postconditions: []
+  audit: true
+- id: service.restart
+  label: Restart služby
+  description: Restartuje pouze explicitně povolenou systemd službu a ověří její stav.
+  category: systemd
+  handler:
+    type: script
+    path: scripts/write/restart_service.sh
+  risk: reversible
+  approval: always
+  enabled: true
+  requires_sudo: true
+  timeout_seconds: 30
+  inputs:
+  - name: service
+    type: allowlist
+    source: allowed-services-restart.txt
+    required: true
+  postconditions:
+  - systemctl is-active
+  - NRestarts
+  - ExecMainStatus
+  audit: true
+- id: docker.restart
+  label: Restart kontejneru
+  description: Restartuje pouze explicitně povolený kontejner a vrátí jeho stav, health a restart count.
+  category: docker
+  handler:
+    type: script
+    path: scripts/write/restart_container.sh
+  risk: reversible
+  approval: always
+  enabled: true
+  requires_sudo: true
+  timeout_seconds: 30
+  inputs:
+  - name: container
+    type: allowlist
+    source: allowed-containers-restart.txt
+    required: true
+  postconditions:
+  - container state
+  - container health
+  - restart count
+  audit: true
+- id: maintenance.apt_clean
+  label: Vyčištění APT cache
+  description: Odstraní pouze stažené balíčky z APT cache a vypíše uvolněné bajty.
+  category: maintenance
+  handler:
+    type: script
+    path: scripts/write/cleanup_apt_cache.sh
+  risk: reversible
+  approval: always
+  enabled: true
+  requires_sudo: true
+  timeout_seconds: 30
+  inputs: []
+  postconditions: []
+  audit: true
+- id: maintenance.journal_vacuum
+  label: Omezení journald
+  description: Zmenší journal na schválenou maximální velikost. Starší systémové logy budou odstraněny.
+  category: maintenance
+  handler:
+    type: script
+    path: scripts/write/vacuum_journal.sh
+  risk: destructive
+  approval: exact
+  enabled: true
+  requires_sudo: true
+  timeout_seconds: 30
+  inputs:
+  - name: max_size
+    type: string
+    pattern: ^[1-9][0-9]{0,4}[KMG]$
+    default: 500M
+  postconditions: []
+  audit: true
+- id: system.reboot
+  label: Restart HanzHubu
+  description: Restartuje celý host. Vyžaduje přesné potvrzení ve tvaru REBOOT-<hostname>.
+  category: system
+  handler:
+    type: script
+    path: scripts/write/reboot_host.sh
+  risk: destructive
+  approval: exact
+  enabled: true
+  requires_sudo: true
+  timeout_seconds: 30
+  inputs:
+  - name: confirmation
+    type: exact_runtime_token
+    required: true
+  postconditions: []
+  audit: true
+- id: memory.search
+  label: Vyhledat v paměti
+  description: Vyhledá entity, vztahy, incidenty, změny a runbooky v osobní provozní paměti. Je pouze čtecí.
+  category: memory
+  handler:
+    type: internal
+    name: memory_search
+  risk: read_only
+  approval: never
+  enabled: true
+  requires_sudo: false
+  inputs:
+  - name: query
+    type: string
+    required: true
+    max_length: 500
+  - name: entity_type
+    type: enum
+    values:
+    - any
+    - host
+    - service
+    - container
+    - path
+    - database
+    - incident
+    - change
+    - runbook
+    default: any
+  audit: true
+- id: memory.propose_fact
+  label: Navrhnout poznatek
+  description: Uloží kandidáta na nový poznatek s důkazem, zdrojem a mírou jistoty. Nevytvoří automaticky ověřenou pravdu.
+  category: memory
+  handler:
+    type: internal
+    name: memory_propose_fact
+  risk: reversible
+  approval: never
+  enabled: true
+  requires_sudo: false
+  inputs:
+  - name: subject
+    type: string
+    required: true
+  - name: statement
+    type: string
+    required: true
+    max_length: 2000
+  - name: evidence
+    type: string
+    required: true
+    max_length: 4000
+  - name: confidence
+    type: enum
+    values:
+    - observation
+    - hypothesis
+    - verified
+    default: observation
+  audit: true
+- id: tool.propose
+  label: Navrhnout nový nástroj
+  description: Vytvoří neaktivní návrh nástroje v pending prostoru. Agent jej nesmí sám aktivovat. Návrh musí obsahovat přesný
+    kód, oprávnění, riziko, testy a SHA-256.
+  category: tooling
+  handler:
+    type: internal
+    name: tool_propose
+  risk: reversible
+  approval: never
+  enabled: true
+  requires_sudo: false
+  inputs:
+  - name: tool_definition
+    type: object
+    required: true
+  - name: script_content
+    type: string
+    required: true
+  - name: test_plan
+    type: string
+    required: true
+  audit: true
+- id: tool.activate_approved
+  label: Aktivovat schválený nástroj
+  description: Aktivuje pouze pending nástroj, jehož ID a SHA-256 uživatel výslovně potvrdil v chatu. Agent nemůže potvrzení
+    vytvořit ani obejít.
+  category: tooling
+  handler:
+    type: internal
+    name: tool_activate_approved
+  risk: destructive
+  approval: exact
+  enabled: true
+  requires_sudo: true
+  inputs:
+  - name: pending_tool_id
+    type: string
+    required: true
+  - name: sha256
+    type: sha256
+    required: true
+  - name: user_confirmation_token
+    type: signed_approval
+    required: true
+  audit: true

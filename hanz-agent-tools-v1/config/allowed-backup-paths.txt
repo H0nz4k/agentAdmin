@@ -1,0 +1,3 @@
+﻿# Kořeny, z nichž smí agent vytvářet zálohy.
+# Nedávej sem /etc celé; přidávej konkrétní adresáře/soubory.
+#/opt/agentAdmin

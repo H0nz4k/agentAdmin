@@ -1,0 +1,32 @@
+﻿version: 1
+default_scope: personal
+work_scope:
+  default_access: deny
+  read_status: false
+  read_logs: false
+  modify: false
+  restart: false
+  export_to_model: false
+  requires_one_time_explicit_approval: true
+execution:
+  arbitrary_shell: false
+  parallel_write_operations: false
+  max_write_operations_per_session: 3
+  command_timeout_seconds_max: 900
+  output_bytes_max: 200000
+  redact_secrets: true
+  deny_pipe_to_shell: true
+  deny_eval: true
+  deny_unverified_download_execution: true
+change_workflow:
+- capture_before_state
+- identify_dependencies
+- classify_risk
+- create_and_verify_backup_if_needed
+- prepare_rollback
+- request_required_approval
+- apply_one_change
+- run_health_checks
+- rollback_on_failure
+- write_audit_record
+- propose_memory_update

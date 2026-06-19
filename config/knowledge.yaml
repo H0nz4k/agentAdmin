@@ -1,0 +1,79 @@
+# =============================================================================
+# Globální paměť HanzHub — poznatky, souvislosti, rozhodnutí
+# =============================================================================
+# Agent tento soubor načítá do každého chatu. Můžeš editovat ručně nebo
+# v aplikaci kliknout „Do paměti“ po užitečné konverzaci.
+#
+# category:
+#   service  — co dělá služba, port, závislosti
+#   path     — co je v adresáři / souboru
+#   issue    — známý problém a příznaky
+#   fix      — ověřené řešení
+#   relation — vazba mezi entitami (viz related)
+#   decision — rozhodnutí proč něco děláme/neděláme
+# =============================================================================
+
+updated_at: "2026-06-19T00:00:00+00:00"
+
+facts:
+  - id: predicapp_overview
+    category: service
+    subject: predicapp
+    text: |
+      Gold Prediction Hub (systemd: predicapp.service, port 8084).
+      Cesta /opt/PredicApp. Hlavní datový soubor predictapp.db (~2 GB).
+      Typicky největší spotřeba RAM i disku na HanzHubu.
+    related: [predictapp.db, /opt/PredicApp/backups]
+    source: audit
+    learned: "2026-06-19"
+
+  - id: hanz_agent_bind_ip
+    category: issue
+    subject: hanz-agent
+    text: |
+      hanz-agent může být nakonfigurován s --host 192.168.1.3 (stará IP).
+      Pi je na 192.168.1.5 — služba pak nemusí být dostupná z LAN.
+      Unit: /etc/systemd/system/hanz-agent.service
+    related: [hanz-agent.service, /opt/hanz-agent]
+    source: audit
+    learned: "2026-06-19"
+
+  - id: hanz_agent_models
+    category: path
+    subject: hanz-agent
+    text: |
+      /opt/hanz-agent obsahuje LLM modely (.gguf), typicky ~2 GB.
+      llama.cpp server — významná RAM při načtení modelu.
+    related: [/opt/hanz-agent/models]
+    source: audit
+    learned: "2026-06-19"
+
+  - id: predicapp_backups_disk
+    category: issue
+    subject: predicapp
+    text: |
+      /opt/PredicApp/backups může růst na ~11 GB (kopie predictapp.db).
+      Kandidát na retenci / archivaci mimo SD kartu po ověření záloh.
+    related: [/opt/PredicApp/backups]
+    source: audit
+    learned: "2026-06-19"
+
+  - id: docker_personal_stack
+    category: relation
+    subject: docker
+    text: |
+      Osobní docker stack na Pi: hanzhub_dashboard (4001), influxdb (8086),
+      grafana, caddy (8081), hanzhub_health. Vše category personal v services.yaml.
+    related: [influxdb, grafana, caddy, hanzhub-dashboard]
+    source: inventory
+    learned: "2026-06-19"
+
+  - id: cloudflared_token_risk
+    category: issue
+    subject: cloudflared
+    text: |
+      Token v ExecStart cloudflared.service uniká do ps a auditů.
+      Lepší: EnvironmentFile v /etc/cloudflared/, token mimo process list.
+    related: [cloudflared.service]
+    source: audit
+    learned: "2026-06-19"

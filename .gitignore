@@ -4,4 +4,9 @@ __pycache__/
 .venv/
 venv/
 data/audits/
+data/agent_actions.jsonl
+data/ui_state.json
+ui_state.json
 *.log
+*.zip
+hanz-agent-tools-v1.zip

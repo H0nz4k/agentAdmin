@@ -1,0 +1,118 @@
+# Vlastní nástroje HanzAgent — co je zde, to agent může volat (prefix custom_).
+# Úroveň: 0=read-only, 1=vratné, 2=potvrzení v GUI, 3=destruktivní
+# Parametry v příkazu: {{název}} — agent je doplní, hodnoty se escapují.
+
+version: 1
+
+tools:
+  - id: hub_uptime_load
+    name: Uptime a load
+    description: Doba běhu systému, load average a počet běžících služeb.
+    level: 0
+    enabled: true
+    command: >-
+      uptime && echo '---' &&
+      systemctl list-units --type=service --state=running --no-pager 2>/dev/null | wc -l
+    parameters: []
+
+  - id: hub_opt_sizes
+    name: Velikosti v /opt
+    description: Top 20 největších složek v /opt (jen čtení).
+    level: 0
+    enabled: true
+    command: du -xhd1 /opt 2>/dev/null | sort -hr | head -20
+    parameters: []
+
+  - id: hub_docker_ps
+    name: Docker kontejnery
+    description: Běžící kontejnery a snapshot využití CPU/RAM.
+    level: 0
+    enabled: true
+    command: >-
+      docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null;
+      echo '---';
+      docker stats --no-stream 2>/dev/null | head -15
+    parameters: []
+
+  - id: hub_journal_errors
+    name: Chyby v journalu (24 h)
+    description: Poslední error/critical záznamy systemd za posledních 24 hodin.
+    level: 0
+    enabled: true
+    command: journalctl -p err..crit --since '24 hours ago' --no-pager -n 40
+    parameters: []
+
+  - id: hub_predicapp_memory
+    name: RAM procesů PredicApp
+    description: Procesy související s PredicApp seřazené podle paměti.
+    level: 0
+    enabled: true
+    command: ps aux --sort=-%mem | grep -iE 'predic|PredicApp' | head -12 || echo 'Žádné procesy'
+    parameters: []
+
+  - id: hub_backup_list
+    name: Seznam záloh PredicApp
+    description: Obsah složky /opt/PredicApp/backups.
+    level: 0
+    enabled: true
+    command: ls -lah /opt/PredicApp/backups 2>/dev/null | tail -35 || echo 'Adresář neexistuje'
+    parameters: []
+
+  - id: hub_venv_sizes
+    name: Velikosti venv v /opt
+    description: Najde venv složky pod /opt a ukáže jejich velikost.
+    level: 0
+    enabled: true
+    command: find /opt -maxdepth 3 -type d -name venv -exec du -sh {} \; 2>/dev/null | sort -hr
+    parameters: []
+
+  - id: hub_health_ports
+    name: Health check portů
+    description: Rychlý HTTP check portů 8084 (PredicApp), 8087 (HanzAgent), 8088 (Stream).
+    level: 0
+    enabled: true
+    command: >-
+      for p in 8084 8087 8088; do
+        code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 2 http://127.0.0.1:$p/ 2>/dev/null || echo fail);
+        echo "port $p: $code";
+      done
+    parameters: []
+
+  - id: hub_service_status
+    name: Stav služby (systemctl)
+    description: Zkrácený systemctl status vybrané služby (max 30 řádků).
+    level: 0
+    enabled: true
+    command: systemctl status {{unit}} --no-pager -l 2>&1 | head -30
+    parameters:
+      - name: unit
+        type: string
+        description: systemd unit, např. predicapp.service
+        required: true
+
+  - id: hub_tail_journal
+    name: Tail logu služby
+    description: Poslední řádky journalu pro systemd službu.
+    level: 0
+    enabled: true
+    command: journalctl -u {{unit}} -n {{lines}} --no-pager 2>&1
+    parameters:
+      - name: unit
+        type: string
+        description: systemd unit, např. hanz-agent.service
+        required: true
+      - name: lines
+        type: integer
+        description: Počet řádků logu
+        default: 50
+        required: false
+
+  - id: hub_free_memory
+    name: Uvolnění RAM (cache drop)
+    description: >-
+      Uvolní page cache (sync; echo 3 > /proc/sys/vm/drop_caches).
+      Dočasné — může pomoct při memory pressure. Vyžaduje potvrzení.
+    level: 2
+    enabled: true
+    command: sync && sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches' && free -h
+    parameters: []

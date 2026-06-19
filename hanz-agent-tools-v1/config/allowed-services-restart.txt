@@ -1,0 +1,2 @@
+﻿# Služby, které smí agent restartovat až po schválení.
+# Záměrně prázdné – doplňuj jednotlivě po otestování.

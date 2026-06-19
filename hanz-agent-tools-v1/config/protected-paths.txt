@@ -1,0 +1,13 @@
+﻿# Cesty, které agent nesmí měnit ani zálohovat tímto obecným nástrojem.
+/
+/boot
+/dev
+/proc
+/sys
+/run
+/root
+/etc/ssh
+/etc/sudoers
+/etc/sudoers.d
+/home/hanz/.ssh
+/var/lib/agentAdmin/audit

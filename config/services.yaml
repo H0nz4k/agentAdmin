@@ -1,8 +1,8 @@
 # HanzHub inventura služeb
-# Vygenerováno: 2026-06-19T02:43:52.964443+02:00
+# Vygenerováno: 2026-06-19T04:19:31.626396+02:00
 # U work služeb nastav protected: true
 
-generated_at: '2026-06-19T02:43:52.964443+02:00'
+generated_at: '2026-06-19T04:19:31.626396+02:00'
 host: 192.168.1.5
 note: Auto-generováno z auditu. Uprav category, owner a protected ručně.
 services:
@@ -23,7 +23,7 @@ services:
     owner: hanz
     runtime: systemd
     unit: hanz-agent.service
-    status: running
+    status: unknown
     path: /opt/hanz-agent
     port: 8087
     has_git: false

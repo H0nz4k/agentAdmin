@@ -1,0 +1,2 @@
+﻿# Kontejnery, jejichž stav/logy smí agent číst.
+# Doplň přesné názvy z `docker ps --format '{{.Names}}'`.

@@ -1,0 +1,5 @@
+﻿# Kořeny povolené pro read-only sken velikostí.
+/
+/opt
+/var
+/home

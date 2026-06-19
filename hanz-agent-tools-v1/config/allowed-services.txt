@@ -1,0 +1,15 @@
+﻿# Služby, jejichž stav/logy smí agent číst (HanzHub inventura).
+# Jedna přesná systemd unit na řádek.
+predicapp.service
+# hanz-agent.service — mimo provoz, nesahat
+appmeteo.service
+app-m.service
+lora-hub.service
+stream-web.service
+whiteboard-hub.service
+planetum_bot.service
+pihole-FTL.service
+cloudflared.service
+lcd-info.service
+docker.service
+ssh.service

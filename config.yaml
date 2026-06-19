@@ -15,3 +15,8 @@ paths:
   audits_dir: "data/audits"
   services_file: "config/services.yaml"
   agent_file: "config/agent.yaml"
+  knowledge_file: "config/knowledge.yaml"
+  custom_tools_file: "config/custom_tools.yaml"
+  v1_tools_pack: "hanz-agent-tools-v1"
+  remote_v1_tools: "/opt/agentAdmin/tools"
+  remote_agent_admin: "/opt/agentAdmin"

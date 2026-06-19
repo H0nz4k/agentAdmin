@@ -47,18 +47,71 @@ from hanz_audit.terminal_launcher import find_unix_paths, open_ssh_terminal, str
 from hanz_audit.version import __version__
 
 
+def _configure_taller_buttons(root: tb.Window) -> int:
+    """Zvětší výšku všech ttk tlačítek cca o 1/3 (padding). Vrátí ipady pro Entry."""
+    style = tb.Style()
+    names = {"TButton"}
+    for boot in ("primary", "secondary", "success", "info", "warning", "danger", "link"):
+        names.add(f"{boot}.TButton")
+        names.add(f"outline.{boot}.TButton")
+        names.add(f"outline-{boot}.TButton")
+    last_py = 6
+    for name in sorted(names):
+        try:
+            cfg = style.configure(name)
+        except tk.TclError:
+            continue
+        if not cfg:
+            continue
+        pad = cfg.get("padding", (10, 6))
+        if isinstance(pad, str):
+            parts = pad.split()
+            pad = tuple(int(x) for x in parts) if parts else (10, 6)
+        elif isinstance(pad, (int, float)):
+            pad = (int(pad), int(pad))
+        elif len(pad) == 1:
+            pad = (int(pad[0]), int(pad[0]))
+        px, py = int(pad[0]), int(pad[1])
+        py = max(py + 1, round(py * 4 / 3))
+        last_py = py
+        try:
+            style.configure(name, padding=(px, py))
+        except tk.TclError:
+            pass
+    _ = root  # style je vázaný na root okno
+    return max(2, round(last_py / 2))
+
+
+def _configure_thumb_button_style(btn_ipady: int, *, base: str, name_suffix: str) -> str:
+    """Větší 👍 tlačítko — font jde jen přes ttk Style, ne přes parametr Button."""
+    style_name = f"AgentAdmin.Thumb.{name_suffix}.TButton"
+    style = tb.Style()
+    for candidate in (base, "outline-secondary.TButton", "TButton"):
+        try:
+            style.layout(style_name, style.layout(candidate))
+            break
+        except tk.TclError:
+            continue
+    py = max(btn_ipady + 4, 10)
+    style.configure(
+        style_name,
+        font=("Segoe UI Emoji", 18),
+        padding=(14, py),
+    )
+    return style_name
+
+
 class HanzAuditApp(tb.Window):
     def __init__(self) -> None:
         self.config_data = load_config()
         root = self.config_data["_root"]
         agent_path = root / self.config_data["paths"].get("agent_file", "config/agent.yaml")
         self.agent_config = load_agent_config(agent_path)
-        agent_name = self.agent_config.get("agent", {}).get("name", "HanzAgent")
         
         # Načtení zvoleného tématu z configu (nebo default "flatly")
         ui_theme = self.agent_config.get("ui", {}).get("theme", "flatly")
         super().__init__(themename=ui_theme)
-        self.window_title_base = f"HanzHub Audit — {agent_name}"
+        self.window_title_base = f"agentAdmin — HanzHub agent v{__version__}"
         self.title(self.window_title_base)
         self.minsize(880, 640)
         
@@ -102,6 +155,7 @@ class HanzAuditApp(tb.Window):
         self._chat_status_timer: str | None = None
         self._agent_console_visible = False
         self._agent_console_loaded = False
+        self._pending_approval: dict | None = None
 
         self._build_ui()
         self._restore_pane_state()
@@ -394,6 +448,7 @@ class HanzAuditApp(tb.Window):
         self.after(0, callback)
 
     def _build_ui(self) -> None:
+        btn_ipady = _configure_taller_buttons(self)
         target = f"{self.ssh_config.user}@{self.ssh_config.host}:{self.ssh_config.port}"
 
         # Header
@@ -403,25 +458,26 @@ class HanzAuditApp(tb.Window):
         head_left = tb.Frame(header, bootstyle=PRIMARY)
         head_left.pack(side=LEFT, fill=X, expand=True)
         tb.Label(
-            head_left, text="HanzHub Audit", font=("Segoe UI", 18, "bold"), bootstyle=(INVERSE, PRIMARY)
+            head_left,
+            text="agentAdmin",
+            font=("Segoe UI", 10),
+            bootstyle=(INVERSE, PRIMARY),
         ).pack(anchor=W)
         tb.Label(
             head_left,
-            text=f"{self.agent_config.get('agent', {}).get('name', 'HanzAgent')} v{__version__}",
-            font=("Segoe UI", 11),
-            bootstyle=(INVERSE, PRIMARY)
-        ).pack(anchor=W, pady=(4, 0))
+            text="HanzHub agent",
+            font=("Segoe UI", 18, "bold"),
+            bootstyle=(INVERSE, PRIMARY),
+        ).pack(anchor=W, pady=(2, 0))
+        tb.Label(
+            head_left,
+            text=__version__,
+            font=("Segoe UI", 10),
+            bootstyle=(INVERSE, PRIMARY),
+        ).pack(anchor=W, pady=(2, 0))
 
         head_right = tb.Frame(header, bootstyle=PRIMARY)
         head_right.pack(side=RIGHT)
-        self.btn_agent = tb.Button(
-            head_right,
-            text="Agent",
-            bootstyle="secondary",
-            command=self._on_toggle_agent_console,
-            width=10,
-        )
-        self.btn_agent.pack(side=LEFT, padx=(0, 12))
         self.host_label = tb.Label(
             head_right,
             text=target,
@@ -437,45 +493,60 @@ class HanzAuditApp(tb.Window):
         )
         self.status_dot.pack(side=LEFT)
 
-        # Toolbar
+        # Toolbar — akce vlevo, Agent vpravo
         toolbar = tb.Frame(self, padding=(16, 12))
         toolbar.pack(fill=X)
 
+        toolbar_left = tb.Frame(toolbar)
+        toolbar_left.pack(side=LEFT, fill=X, expand=True)
+
+        toolbar_right = tb.Frame(toolbar)
+        toolbar_right.pack(side=RIGHT)
+
+        self.btn_agent = tb.Button(
+            toolbar_right,
+            text="Agent",
+            bootstyle="secondary",
+            command=self._on_toggle_agent_console,
+            width=10,
+        )
+        self.btn_agent.pack(side=RIGHT)
+
         self.btn_connect = self._add_toolbar_button(
-            toolbar, "Připojit SSH", self._on_connect
+            toolbar_left, "Připojit SSH", self._on_connect
         )
 
         self.btn_audit = self._add_toolbar_button(
-            toolbar,
+            toolbar_left,
             "Spustit audit",
             self._on_run_audit,
             state=DISABLED,
         )
 
         self.btn_export = self._add_toolbar_button(
-            toolbar,
+            toolbar_left,
             "Exportovat MD…",
             self._on_export,
             state=DISABLED,
         )
 
         self.btn_reset_chat = self._add_toolbar_button(
-            toolbar, "Reset chatu", self._on_reset_chat
+            toolbar_left, "Reset chatu", self._on_reset_chat
         )
 
         self.btn_terminal = self._add_toolbar_button(
-            toolbar, "Terminál", self._on_open_terminal
+            toolbar_left, "Terminál", self._on_open_terminal
         )
 
         self.btn_memory = self._add_toolbar_button(
-            toolbar, "Do paměti", self._on_save_to_memory
+            toolbar_left, "Do paměti", self._on_save_to_memory
         )
 
         self.btn_tools = self._add_toolbar_button(
-            toolbar, "Nástroje", self._on_open_tools_manager
+            toolbar_left, "Nástroje", self._on_open_tools_manager
         )
 
-        self.progress = tb.Progressbar(toolbar, mode="indeterminate", bootstyle=SUCCESS, length=200)
+        self.progress = tb.Progressbar(toolbar_left, mode="indeterminate", bootstyle=SUCCESS, length=200)
 
         # Main layout: report + chat nahoře, volitelně agent konzole dole
         self.body_paned = tb.Panedwindow(self, orient=VERTICAL)
@@ -623,8 +694,23 @@ class HanzAuditApp(tb.Window):
 
         self.chat_input_row = tb.Frame(chat_outer)
         self.chat_input_row.pack(fill=X)
+        thumb_style_idle = _configure_thumb_button_style(
+            btn_ipady, base="outline-secondary.TButton", name_suffix="Idle"
+        )
+        self._thumb_style_idle = thumb_style_idle
+        self._thumb_style_pending = _configure_thumb_button_style(
+            btn_ipady, base="success.TButton", name_suffix="Pending"
+        )
+        self.btn_thumb = tb.Button(
+            self.chat_input_row,
+            text="👍",
+            width=4,
+            style=thumb_style_idle,
+            command=self._on_thumb_up,
+        )
+        self.btn_thumb.pack(side=LEFT, padx=(0, 8))
         self.chat_input = tb.Entry(self.chat_input_row, font=("Segoe UI", 11))
-        self.chat_input.pack(side=LEFT, fill=X, expand=True, padx=(0, 10))
+        self.chat_input.pack(side=LEFT, fill=X, expand=True, padx=(0, 10), ipady=btn_ipady)
         self.chat_input.bind("<Return>", lambda _e: self._on_send_chat())
         self.btn_send = tb.Button(
             self.chat_input_row, text="Odeslat", bootstyle=PRIMARY, command=self._on_send_chat
@@ -655,28 +741,38 @@ class HanzAuditApp(tb.Window):
                 "Nástroje: tlačítko „Nástroje“ — vlastní YAML + balíček hanz-agent-tools-v1.\n"
                 "Skripty v1 musí být na Pi v /opt/agentAdmin/tools (viz README balíčku).\n"
                 "Soubory: read_file / write_file / delete_file jen na whitelistu — zápis a mazání potvrzuješ v dialogu.\n"
+                "Dokumentace na PC: create_local_document → data/docs/ (funguje i bez SSH).\n"
+                "👍 vlevo = souhlas / pokračuj (potvrzení nástroje nebo zpráva do chatu).\n"
                 "Tlačítko „Vyřešit“ spustí plný servisní režim.\n",
             )
         except ValueError as exc:
             self._append_chat("error", f"{exc}\n")
             self.btn_send.config(state=DISABLED)
 
-    def _ensure_executor(self) -> AgentExecutor | None:
-        if not self.ssh or not self.ssh.connected:
-            return None
+    def _ensure_executor(self) -> AgentExecutor:
         root = self.config_data["_root"]
         log_path = root / "data" / "agent_actions.jsonl"
-        self._executor = AgentExecutor(
-            self.ssh,
-            log_path,
-            approval=self._request_tool_approval,
-            on_console=self._on_agent_console,
-            tools_path=self.custom_tools_path,
-            on_tools_reload=self._reload_agent_tools,
-            v1_pack_path=self.v1_pack_path,
-            remote_tools_root=self.remote_v1_tools,
-        )
+        ssh = self.ssh if self.ssh and self.ssh.connected else None
+        if self._executor is None:
+            self._executor = AgentExecutor(
+                ssh,
+                root,
+                log_path,
+                approval=self._request_tool_approval,
+                on_console=self._on_agent_console,
+                tools_path=self.custom_tools_path,
+                on_tools_reload=self._reload_agent_tools,
+                v1_pack_path=self.v1_pack_path,
+                remote_tools_root=self.remote_v1_tools,
+            )
+        else:
+            self._executor.ssh = ssh
         return self._executor
+
+    def _executor_force_text(self) -> bool:
+        if self._executor is None:
+            return False
+        return self._executor.should_force_text_response()
 
     def _reload_agent_tools(self) -> None:
         if self.chat:
@@ -695,40 +791,100 @@ class HanzAuditApp(tb.Window):
             on_saved=self._reload_agent_tools,
         )
 
+    def _set_thumb_pending(self, pending: bool) -> None:
+        if pending:
+            self.btn_thumb.config(style=self._thumb_style_pending, state=NORMAL)
+            self.btn_thumb.lift()
+        else:
+            self.btn_thumb.config(style=self._thumb_style_idle)
+            if not self._busy:
+                self.btn_thumb.config(state=NORMAL)
+
+    def _clear_pending_approval(self) -> None:
+        self._pending_approval = None
+        self._set_thumb_pending(False)
+
+    def _on_thumb_up(self) -> None:
+        if self._pending_approval:
+            pending = self._pending_approval
+            if not pending["event"].is_set():
+                pending["result"][0] = True
+                pending["event"].set()
+                self._append_chat("system", "👍 Souhlasím — pokračuj.\n")
+            self._clear_pending_approval()
+            return
+        if self._busy or not self.chat:
+            return
+        self._send_chat_message("Ano, souhlasím — pokračuj.")
+
     def _request_tool_approval(
         self, tool_name: str, arguments: dict, level: OperationLevel, description: str
     ) -> bool:
         result: list[bool | None] = [None]
         event = threading.Event()
 
+        from hanz_audit.local_docs import LOCAL_TOOLS
+
+        is_local = tool_name in LOCAL_TOOLS
+        target = "na tvém PC (lokální soubor)" if is_local else "na Pi"
+
         def ask() -> None:
             if level == OperationLevel.DESTRUCTIVE:
                 msg = (
                     f"DESTRUKTIVNÍ OPERACE\n\n{description}\n\n"
                     f"Nástroj: {tool_name}\nParametry: {arguments}\n\n"
-                    "Potvrď kliknutím Ano pouze pokud souhlasíš."
+                    "Potvrď kliknutím Ano nebo 👍 vlevo dole."
+                )
+            elif is_local:
+                msg = (
+                    f"Vytvoření / zápis dokumentu {target}\n\n{description}\n\n"
+                    f"Nástroj: {tool_name}\nParametry: {arguments}\n\n"
+                    "Povolit uložení souboru? (Ano nebo 👍)"
                 )
             else:
                 msg = (
                     f"Citlivá operace (úroveň 2)\n\n{description}\n\n"
                     f"Nástroj: {tool_name}\nParametry: {arguments}\n\n"
-                    "Povolit provedení na Pi?"
+                    "Povolit provedení na Pi? (Ano nebo 👍)"
                 )
+
+            self._pending_approval = {
+                "event": event,
+                "result": result,
+                "tool_name": tool_name,
+            }
+            self._set_thumb_pending(True)
+            self._append_chat(
+                "system",
+                f"⏳ Čekám na souhlas: {description}\n"
+                f"Klikni 👍 vlevo dole = Ano / pokračovat.\n",
+            )
             if self._busy:
-                self._set_chat_status(f"Čekám na potvrzení: {tool_name}")
+                self._set_chat_status(f"Potvrzení: {tool_name} — 👍 = Ano")
+
+            if level == OperationLevel.SENSITIVE:
+                return
+
             result[0] = self._ask_yes_no("HanzAgent — potvrzení", msg, alert=True)
+            if result[0] is None:
+                result[0] = False
+            event.set()
+            self.after(0, self._clear_pending_approval)
             if self._busy:
                 self._set_chat_status("Servis + AI")
-            event.set()
+
+        def on_timeout_cleanup() -> None:
+            self._clear_pending_approval()
 
         self.after(0, ask)
         event.wait(timeout=300)
+        self.after(0, on_timeout_cleanup)
+        if self._busy and not event.is_set():
+            self.after(0, lambda: self._set_chat_status("Servis + AI"))
         return bool(result[0])
 
     def _tool_handler(self, tool_name: str, arguments: dict) -> str:
         executor = self._ensure_executor()
-        if not executor:
-            return '{"ok": false, "output": "SSH není připojeno — nástroj nelze spustit."}'
 
         def on_ui_notify() -> None:
             self._append_chat("system", f"Spouštím nástroj: {tool_name}…\n")
@@ -736,6 +892,11 @@ class HanzAuditApp(tb.Window):
 
         self._run_on_ui(on_ui_notify)
         return executor.run_tool(tool_name, arguments)
+
+    def _chat_tool_handler(self):
+        if self.chat and self.chat.tools_enabled:
+            return self._tool_handler
+        return None
 
     def _set_status_indicator(self, state: str) -> None:
         states = {
@@ -796,29 +957,37 @@ class HanzAuditApp(tb.Window):
         self.chat_progress.stop()
         self.chat_activity.pack_forget()
 
+    def _show_connect_progress(self) -> None:
+        """Zelený jezdec v liště — jen při SSH připojování."""
+        self._set_status_indicator("busy")
+        self.progress.pack(side=LEFT, padx=(20, 0))
+        self.progress.start(10)
+
+    def _hide_connect_progress(self) -> None:
+        self.progress.stop()
+        self.progress.pack_forget()
+
     def _set_busy(self, busy: bool, status: str = "") -> None:
         self._busy = busy
         if busy:
-            self._set_status_indicator("busy")
-            self.progress.pack(side=LEFT, padx=(20, 0))
-            self.progress.start(10)
+            if not self._connecting:
+                self._set_status_indicator("busy")
             self._show_chat_activity(status)
             self.btn_send.config(text="Pracuji…", bootstyle=SECONDARY)
         elif self.ssh and self.ssh.connected:
             self._set_status_indicator("ok")
-            self.progress.stop()
-            self.progress.pack_forget()
             self._hide_chat_activity()
             self.btn_send.config(text="Odeslat", bootstyle=PRIMARY)
         else:
-            self._set_status_indicator("idle")
-            self.progress.stop()
-            self.progress.pack_forget()
+            if not self._connecting:
+                self._set_status_indicator("idle")
             self._hide_chat_activity()
             self.btn_send.config(text="Odeslat", bootstyle=PRIMARY)
         input_state = DISABLED if busy or not self.chat else NORMAL
         self.chat_input.config(state=input_state)
         self.btn_send.config(state=input_state)
+        # Palec musí jít kliknout i během „Pracuji…“ — jinak nejde potvrdit nástroj
+        self.btn_thumb.config(state=NORMAL)
         self._refresh_toolbar()
 
     def _on_connect(self) -> None:
@@ -832,6 +1001,7 @@ class HanzAuditApp(tb.Window):
             return
 
         self._connecting = True
+        self._show_connect_progress()
         self._refresh_toolbar()
 
         def work() -> None:
@@ -844,6 +1014,7 @@ class HanzAuditApp(tb.Window):
                 def on_ok() -> None:
                     self.ssh = client
                     self._connecting = False
+                    self._hide_connect_progress()
                     self._update_connection_ui(
                         True,
                         f"Připojeno — {self.ssh_config.host} ({first_line})",
@@ -855,6 +1026,7 @@ class HanzAuditApp(tb.Window):
 
                 def on_err() -> None:
                     self._connecting = False
+                    self._hide_connect_progress()
                     self.ssh = None
                     self._update_connection_ui(
                         False, "SSH — nepřipojeno", indicator="error"
@@ -1148,7 +1320,11 @@ class HanzAuditApp(tb.Window):
             prompt = build_fix_prompt(rec, live_data)
             try:
                 self._run_on_ui(lambda: self._set_chat_status("Agent pracuje (AI + nástroje)"))
-                reply, tools_used = self.chat.ask(prompt, tool_handler=self._tool_handler)
+                reply, tools_used = self.chat.ask(
+                    prompt,
+                    tool_handler=self._tool_handler,
+                    should_force_text=self._executor_force_text,
+                )
 
                 def on_ok() -> None:
                     self._append_chat("assistant", f"{reply}\n")
@@ -1197,11 +1373,6 @@ class HanzAuditApp(tb.Window):
                 False,
             )
 
-    def _chat_tool_handler(self):
-        if self.ssh and self.ssh.connected and self.chat and self.chat.tools_enabled:
-            return self._tool_handler
-        return None
-
     def _send_chat_message(self, msg: str, status: str = "AI odpovídá…") -> None:
         if self._busy or not self.chat:
             return
@@ -1217,7 +1388,11 @@ class HanzAuditApp(tb.Window):
             try:
                 if tool_handler:
                     self._run_on_ui(lambda: self._set_chat_status("Agent pracuje (AI + nástroje)"))
-                    reply, tools_used = self.chat.ask(msg, tool_handler=tool_handler)
+                    reply, tools_used = self.chat.ask(
+                        msg,
+                        tool_handler=tool_handler,
+                        should_force_text=self._executor_force_text,
+                    )
                 else:
                     self._run_on_ui(lambda: self._set_chat_status("OpenAI odpovídá"))
                     reply, tools_used = self.chat.ask(msg)
@@ -1411,10 +1586,12 @@ class HanzAuditApp(tb.Window):
             self.chat.reset_conversation()
             if self.current_report_md:
                 self.chat.set_audit_context(self.current_report_md)
+        if self._executor:
+            self._executor.reset_session()
         self.chat_text.text.config(state=NORMAL)
         self.chat_text.text.delete("1.0", END)
         self.chat_text.text.config(state=DISABLED)
-        self._append_chat("system", "Nová konverzace.\n")
+        self._append_chat("system", "Nová konverzace (limit nástrojů resetován).\n")
 
     def destroy(self) -> None:
         self._on_close()

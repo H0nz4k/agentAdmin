@@ -3,6 +3,7 @@
 
 policy:
   max_writes_per_session: 5
+  max_local_writes_per_session: 10
   max_restarts_per_session: 3
   remote_disable_file: /etc/agentAdmin/disable-writes
   backup_dir: /opt/agentAdmin/backups
@@ -28,6 +29,7 @@ level_2_tools:
   - disable_service
   - delete_dangling_docker_images_by_name
   - write_file
+  - create_local_document
 
 # Úroveň 3 — vyžaduje přesnou frázi
 level_3_tools:
@@ -97,6 +99,21 @@ delete_whitelist:
     pattern: "predictapp_*.db"
     min_age_days: 30
     description: Staré DB zálohy PredicApp (>30 dní)
+
+# Lokální dokumenty na PC (kde běží Agent Admin) — create_local_document
+local_document_paths:
+  - id: docs
+    path: data/docs
+    max_bytes: 524288
+    description: Hlavní složka dokumentace (Markdown)
+  - id: docs_reports
+    path: data/docs/reports
+    max_bytes: 524288
+    description: Reporty z auditu a diagnostiky
+  - id: docs_notes
+    path: data/docs/notes
+    max_bytes: 262144
+    description: Poznámky a krátké zápisy
 
 # Zakázané vzory — nikdy neprovádět
 forbidden_patterns:

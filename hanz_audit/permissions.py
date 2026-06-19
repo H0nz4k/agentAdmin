@@ -9,6 +9,7 @@ import yaml
 from hanz_audit.config import ROOT
 from hanz_audit.custom_tools import get_custom_tool
 from hanz_audit.file_ops import parse_file_paths
+from hanz_audit.local_docs import LOCAL_TOOLS, parse_local_document_paths
 
 
 class OperationLevel(IntEnum):
@@ -53,6 +54,8 @@ def get_service(services: dict, service_id: str) -> dict | None:
 
 
 def tool_level(permissions: dict, tool_name: str) -> OperationLevel:
+    if tool_name == "list_local_documents":
+        return OperationLevel.READ
     if tool_name.startswith("get_") or tool_name.startswith("read_") or tool_name.startswith("list_") or tool_name == "run_live_diagnostics":
         return OperationLevel.READ
     if tool_name in permissions.get("level_3_tools", []):
@@ -87,6 +90,17 @@ def check_tool(
 ) -> PermissionDecision:
     if tool_name == "register_custom_tool":
         return PermissionDecision(True, OperationLevel.SENSITIVE)
+
+    if tool_name in LOCAL_TOOLS:
+        level = tool_level(permissions, tool_name)
+        if tool_name == "create_local_document":
+            path_id = arguments.get("path_id", "docs")
+            allowed = set(parse_local_document_paths(permissions).keys())
+            if path_id not in allowed:
+                return PermissionDecision(
+                    False, OperationLevel.FORBIDDEN, f"Lokální složka {path_id} není na whitelistu."
+                )
+        return PermissionDecision(True, level)
 
     custom = get_custom_tool(tool_name)
     if custom:

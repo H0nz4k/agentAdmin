@@ -2,6 +2,29 @@
 
 Všechny důležité změny v projektu Agent Admin (dříve HanzHub Audit) jsou zaznamenány v tomto souboru.
 
+## [1.4.4] - 2026-06-19
+### Přidáno
+- **Anti-loop ochrana** — po limitu zápisů blokace nástrojů, vynucená změna strategie, oprava historie tool_calls (chyba 400).
+- **Větší tlačítko 👍** — vlastní ttk styl, zelený stav při potvrzení.
+
+### Změněno
+- GUI: tlačítko Agent v liště, vyšší tlačítka, hlavička verze, progress jen při SSH.
+- Agent prompt: pravidla proti opakování nástrojů (`no_tool_loops`).
+
+## [1.4.3] - 2026-06-19
+### Přidáno
+- **create_local_document** — agent vytvoří Markdown dokumentaci na PC (`data/docs/`), s potvrzením v GUI.
+- **list_local_documents** — přehled lokálních .md souborů.
+- Nástroje fungují v chatu i bez SSH (Pi nástroje stále vyžadují připojení).
+
+## [1.4.2] - 2026-06-19
+### Přidáno
+- **get_docker_disk_overview** — read-only diagnostika docker místa před prune.
+
+### Změněno
+- Agent neopakuje `docker_prune_dangling` když vrátí 0B; lepší popisy nástrojů a paměť v knowledge.yaml.
+- Zelený progress v liště jen při SSH připojování (1.4.1).
+
 ## [1.4.1] - 2026-06-19
 ### Přidáno
 - **Deploy na Pi:** `scripts/deploy_pi.py` a `scripts/deploy-to-pi.ps1` — nahrání balíčku přes SSH a instalace do `/opt/agentAdmin`.

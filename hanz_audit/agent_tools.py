@@ -18,6 +18,7 @@ from hanz_audit.file_ops import (
     resolve_remote_path,
     shell_quote,
 )
+from hanz_audit.local_docs import local_tool_schemas
 from hanz_audit.permissions import (
     OperationLevel,
     get_service,
@@ -177,8 +178,22 @@ OPENAI_TOOL_SCHEMAS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "get_docker_disk_overview",
+            "description": (
+                "Read-only: docker system df + největší images a logy kontejnerů. "
+                "Volej PŘED jakýmkoli prune — ukáže co skutečně zabírá místo."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "restart_docker_container",
-            "description": "Úroveň 1: restart docker kontejneru z inventáře.",
+            "description": (
+                "Úroveň 1: restart docker kontejneru z inventáře. "
+                "container_id = jméno kontejneru (docker ps Names), NE název image (např. lissy93/dashy:latest)."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {"container_id": {"type": "string"}},
@@ -190,7 +205,11 @@ OPENAI_TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "docker_prune_dangling",
-            "description": "Úroveň 1: smaže dangling docker images (ne běžící kontejnery).",
+            "description": (
+                "Úroveň 1: smaže jen DANGLING (untagged) docker images. "
+                "Pokud vrátí Total reclaimed space: 0B, nic neuvolnilo — NEOPAKUJ. "
+                "Nejdřív get_docker_disk_overview; větší úspora může být v PredicApp zálohách nebo docker system prune."
+            ),
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
@@ -198,7 +217,10 @@ OPENAI_TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "docker_system_prune",
-            "description": "Úroveň 2: docker system prune -f (vyžaduje potvrzení).",
+            "description": (
+                "Úroveň 2: docker system prune -f — nevyužívané sítě, build cache, stopped kontejnery "
+                "(NE maže images používané kontejnery). Vyžaduje potvrzení."
+            ),
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
@@ -418,6 +440,7 @@ def get_all_tool_schemas(
     permissions = load_permissions()
     return (
         list(OPENAI_TOOL_SCHEMAS)
+        + local_tool_schemas(permissions)
         + _file_tool_schemas(permissions)
         + custom_tools_to_schemas(
             tools_path,
@@ -541,6 +564,15 @@ def execute_tool(
         )
         return ToolResult(code == 0, out)
 
+    if tool_name == "get_docker_disk_overview":
+        out, code = run(
+            "docker system df 2>&1 && echo '--- IMAGES (size) ---' && "
+            "docker images --format 'table {{.Repository}}\\t{{.Tag}}\\t{{.Size}}\\t{{.ID}}' 2>&1 | head -25 && "
+            "echo '--- CONTAINERS ---' && "
+            "docker ps -a --format 'table {{.Names}}\\t{{.Status}}\\t{{.Size}}' 2>&1 | head -20"
+        )
+        return ToolResult(code == 0, out[:8000])
+
     if tool_name == "get_service_status":
         unit, container, runtime = _resolve_unit(services, args["service_id"])
         if not unit and not container:
@@ -644,6 +676,13 @@ def execute_tool(
 
     if tool_name == "docker_prune_dangling":
         out, code = run("docker image prune -f 2>&1")
+        if code == 0 and ("0B" in out or "0 B" in out):
+            out += (
+                "\n\n→ Žádné dangling images k odstranění. "
+                "Nepokoušej se prune opakovat. "
+                "Zavolej get_docker_disk_overview, custom_hub_opt_sizes, list_old_backups "
+                "nebo custom_v1_disk_overview — místo obvykle žere PredicApp / zálohy / journal."
+            )
         return ToolResult(code == 0, out, OperationLevel.REVERSIBLE)
 
     if tool_name == "docker_system_prune":

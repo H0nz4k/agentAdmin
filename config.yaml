@@ -20,3 +20,4 @@ paths:
   v1_tools_pack: "hanz-agent-tools-v1"
   remote_v1_tools: "/opt/agentAdmin/tools"
   remote_agent_admin: "/opt/agentAdmin"
+  docs_dir: "data/docs"

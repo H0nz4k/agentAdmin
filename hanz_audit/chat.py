@@ -22,6 +22,62 @@ def load_info_context(root: Path, info_file: str) -> str:
 
 ToolHandler = Callable[[str, dict], str]
 
+_STRATEGY_FAIL_MARKERS = (
+    "limit změn",
+    "neopakuj",
+    "zablokován",
+    "vyčerpán",
+)
+
+_STRATEGY_HALT_SYSTEM = (
+    "Systém: zápisový limit nebo opakované selhání nástroje. "
+    "Zápisové nástroje (stop, delete, write, restart…) jsou pro tuto relaci vypnuté. "
+    "NEOPAKUJ je. Místo toho: read-only diagnostika (get_memory_overview, read_file, get_service_status) "
+    "NEBO text pro uživatele s ručními příkazy / Reset chatu."
+)
+
+
+def _is_strategy_failure(result: str) -> bool:
+    low = result.lower()
+    return '"ok": false' in low and any(m in low for m in _STRATEGY_FAIL_MARKERS)
+
+
+_SKIPPED_TOOL_RESULT = json.dumps(
+    {
+        "ok": False,
+        "output": "Nástroj nebyl spuštěn — předchozí krok selhal (limit nebo strategie).",
+    },
+    ensure_ascii=False,
+)
+
+
+def _ensure_tool_responses(messages: list[dict]) -> None:
+    """Opraví historii — každý tool_call_id musí mít odpovídající tool zprávu (OpenAI API)."""
+    i = 0
+    while i < len(messages):
+        msg = messages[i]
+        if msg.get("role") != "assistant" or not msg.get("tool_calls"):
+            i += 1
+            continue
+        expected = {tc["id"] for tc in msg["tool_calls"]}
+        j = i + 1
+        found: set[str] = set()
+        while j < len(messages) and messages[j].get("role") == "tool":
+            tid = messages[j].get("tool_call_id")
+            if tid:
+                found.add(tid)
+            j += 1
+        missing = expected - found
+        if missing:
+            stubs = [
+                {"role": "tool", "tool_call_id": tid, "content": _SKIPPED_TOOL_RESULT}
+                for tid in sorted(missing)
+            ]
+            for offset, stub in enumerate(stubs):
+                messages.insert(j + offset, stub)
+            j += len(stubs)
+        i = j
+
 
 class ChatSession:
     def __init__(
@@ -90,11 +146,20 @@ class ChatSession:
             remote_tools_root=self.remote_tools_root,
         )
 
-    def ask(self, user_message: str, tool_handler: ToolHandler | None = None) -> tuple[str, bool]:
+    def ask(
+        self,
+        user_message: str,
+        tool_handler: ToolHandler | None = None,
+        *,
+        should_force_text: Callable[[], bool] | None = None,
+    ) -> tuple[str, bool]:
         self.messages.append({"role": "user", "content": user_message})
         use_tools = self.tools_enabled and tool_handler is not None
         max_rounds = 10 if use_tools else 1
         tools_used = False
+        force_text_next = False
+        strategy_halt_seen = False
+        strategy_fail_count = 0
 
         for _ in range(max_rounds):
             kwargs: dict = {
@@ -102,18 +167,24 @@ class ChatSession:
                 "messages": self.messages,
                 "temperature": 0.2,
             }
-            if use_tools:
+            text_only_round = force_text_next or (
+                should_force_text is not None and should_force_text()
+            )
+            if use_tools and not text_only_round:
                 kwargs["tools"] = get_all_tool_schemas(
                     self.custom_tools_path,
                     v1_pack_path=self.v1_pack_path,
                     remote_tools_root=self.remote_tools_root,
                 )
                 kwargs["tool_choice"] = "auto"
+            force_text_next = False
+
+            _ensure_tool_responses(self.messages)
 
             response = self.client.chat.completions.create(**kwargs)
             msg = response.choices[0].message
 
-            if not use_tools or not msg.tool_calls:
+            if not use_tools or text_only_round or not msg.tool_calls:
                 text = msg.content or ""
                 self.messages.append({"role": "assistant", "content": text})
                 return text, tools_used
@@ -134,7 +205,18 @@ class ChatSession:
             ]
             self.messages.append(assistant_msg)
 
+            halt_this_round = False
+            skip_remaining = False
             for tc in msg.tool_calls:
+                if skip_remaining:
+                    self.messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "content": _SKIPPED_TOOL_RESULT,
+                        }
+                    )
+                    continue
                 try:
                     args = json.loads(tc.function.arguments or "{}")
                 except json.JSONDecodeError:
@@ -147,11 +229,25 @@ class ChatSession:
                         "content": result,
                     }
                 )
+                if _is_strategy_failure(result):
+                    strategy_fail_count += 1
+                    if not strategy_halt_seen:
+                        self.messages.append(
+                            {"role": "system", "content": _STRATEGY_HALT_SYSTEM}
+                        )
+                        strategy_halt_seen = True
+                    halt_this_round = True
+                    skip_remaining = True
+                    if strategy_fail_count >= 2:
+                        force_text_next = True
+
+            if halt_this_round:
+                continue
 
         return (
             "Dosáhnut limit 10 kol nástrojů — zastavuji se.\n"
             "Agent opakovaně volal stejné nástroje bez úspěchu. "
-            "Zkus „Zkusit vyřešit“ nebo napiš do chatu konkrétněji, co má udělat.",
+            "Zkus „Reset chatu“ a napiš konkrétněji, co má udělat — nebo proveď ruční krok v terminálu.",
             tools_used,
         )
 

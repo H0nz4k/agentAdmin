@@ -97,9 +97,6 @@ class HanzAuditApp(tb.Window):
         )
         self.status_dot.pack(side=LEFT, padx=(0, 8))
         self.status_var = tk.StringVar(value="Nepřipojeno")
-        tb.Label(
-            head_right, textvariable=self.status_var, font=("Segoe UI", 11), bootstyle=(INVERSE, PRIMARY)
-        ).pack(side=LEFT)
 
         # Toolbar
         toolbar = tb.Frame(self, padding=(16, 12))
@@ -156,6 +153,10 @@ class HanzAuditApp(tb.Window):
         overview_paned.add(overview_text_frame, weight=3)
         overview_paned.add(actions_outer, weight=2)
 
+        is_dark = "dark" in self.agent_config.get("ui", {}).get("theme", "flatly").lower() or self.agent_config.get("ui", {}).get("theme", "flatly").lower() in ["cyborg", "superhero", "solar", "vapor"]
+        bg_color = "#222222" if is_dark else "#ffffff"
+        fg_color = "#f8fafc" if is_dark else "#212529"
+
         self.overview_text = scrolledtext.ScrolledText(
             overview_text_frame,
             wrap=WORD,
@@ -166,8 +167,8 @@ class HanzAuditApp(tb.Window):
             relief=FLAT,
             padx=10,
             pady=10,
-            bg="#222222",
-            fg="#f8fafc"
+            bg=bg_color,
+            fg=fg_color
         )
         self.overview_text.pack(fill=BOTH, expand=True, padx=2, pady=2)
 
@@ -198,7 +199,7 @@ class HanzAuditApp(tb.Window):
         # Detail Tab
         self.report_text = scrolledtext.ScrolledText(
             detail_tab, wrap=WORD, font=("Consolas", 10), state=DISABLED, relief=FLAT, padx=10, pady=10,
-            bg="#222222", fg="#f8fafc"
+            bg=bg_color, fg=fg_color
         )
         self.report_text.pack(fill=BOTH, expand=True, padx=2, pady=2)
 
@@ -207,10 +208,10 @@ class HanzAuditApp(tb.Window):
         # Chat
         self.chat_text = scrolledtext.ScrolledText(
             chat_outer, wrap=WORD, font=("Segoe UI", 11), state=DISABLED, height=8, relief=FLAT, padx=10, pady=10,
-            bg="#222222", fg="#f8fafc"
+            bg=bg_color, fg=fg_color
         )
         self.chat_text.tag_configure("user", foreground="#3b82f6", font=("Segoe UI", 11, "bold"))
-        self.chat_text.tag_configure("assistant", foreground="#f8fafc", font=("Segoe UI", 11))
+        self.chat_text.tag_configure("assistant", foreground=fg_color, font=("Segoe UI", 11))
         self.chat_text.tag_configure("system", foreground="#94a3b8", font=("Segoe UI", 10, "italic"))
         self.chat_text.tag_configure("error", foreground="#ef4444", font=("Segoe UI", 11, "bold"))
         self.chat_text.pack(fill=BOTH, expand=True, pady=(0, 10))
@@ -272,7 +273,7 @@ class HanzAuditApp(tb.Window):
         if status:
             self.status_var.set(status)
         elif not connected:
-            self.status_var.set("Nepřipojeno — klikni Připojit SSH")
+            self.status_var.set("Nepřipojeno")
 
     def _set_busy(self, busy: bool, status: str = "") -> None:
         self._busy = busy

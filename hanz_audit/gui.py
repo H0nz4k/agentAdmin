@@ -24,16 +24,21 @@ from hanz_audit.inventory import (
 from hanz_audit.overview import format_overview
 from hanz_audit.report import audit_to_markdown, recommendations_brief, save_audit_markdown
 from hanz_audit.ssh_client import SSHClient, SSHConfig, format_ssh_error
+from hanz_audit.version import __version__
 
 
 class HanzAuditApp(tb.Window):
     def __init__(self) -> None:
-        super().__init__(themename="flatly")
         self.config_data = load_config()
         root = self.config_data["_root"]
         agent_path = root / self.config_data["paths"].get("agent_file", "config/agent.yaml")
         self.agent_config = load_agent_config(agent_path)
         agent_name = self.agent_config.get("agent", {}).get("name", "HanzAgent")
+        
+        # Načtení zvoleného tématu z configu (nebo default "flatly")
+        ui_theme = self.agent_config.get("ui", {}).get("theme", "flatly")
+        super().__init__(themename=ui_theme)
+        
         self.title(f"HanzHub Audit — {agent_name}")
         self.geometry("1120x860")
         self.minsize(880, 640)
@@ -77,7 +82,7 @@ class HanzAuditApp(tb.Window):
         ).pack(anchor=W)
         tb.Label(
             head_left,
-            text=f"{self.agent_config.get('agent', {}).get('name', 'HanzAgent')}  ·  {target}",
+            text=f"{self.agent_config.get('agent', {}).get('name', 'HanzAgent')} v{__version__}  ·  {target}",
             font=("Segoe UI", 11),
             bootstyle=(INVERSE, PRIMARY)
         ).pack(anchor=W, pady=(4, 0))
@@ -124,6 +129,8 @@ class HanzAuditApp(tb.Window):
         )
         self.btn_reset_chat.pack(side=LEFT)
 
+        self.progress = tb.Progressbar(toolbar, mode="indeterminate", bootstyle=SUCCESS, length=200)
+
         # Main PanedWindow
         paned = tb.Panedwindow(self, orient=VERTICAL, bootstyle=INFO)
         paned.pack(fill=BOTH, expand=True, padx=14, pady=(4, 14))
@@ -158,7 +165,9 @@ class HanzAuditApp(tb.Window):
             spacing3=6,
             relief=FLAT,
             padx=10,
-            pady=10
+            pady=10,
+            bg="#222222",
+            fg="#f8fafc"
         )
         self.overview_text.pack(fill=BOTH, expand=True, padx=2, pady=2)
 
@@ -188,7 +197,8 @@ class HanzAuditApp(tb.Window):
 
         # Detail Tab
         self.report_text = scrolledtext.ScrolledText(
-            detail_tab, wrap=WORD, font=("Consolas", 10), state=DISABLED, relief=FLAT, padx=10, pady=10
+            detail_tab, wrap=WORD, font=("Consolas", 10), state=DISABLED, relief=FLAT, padx=10, pady=10,
+            bg="#222222", fg="#f8fafc"
         )
         self.report_text.pack(fill=BOTH, expand=True, padx=2, pady=2)
 
@@ -196,11 +206,12 @@ class HanzAuditApp(tb.Window):
 
         # Chat
         self.chat_text = scrolledtext.ScrolledText(
-            chat_outer, wrap=WORD, font=("Segoe UI", 11), state=DISABLED, height=8, relief=FLAT, padx=10, pady=10
+            chat_outer, wrap=WORD, font=("Segoe UI", 11), state=DISABLED, height=8, relief=FLAT, padx=10, pady=10,
+            bg="#222222", fg="#f8fafc"
         )
-        self.chat_text.tag_configure("user", foreground="#2563eb", font=("Segoe UI", 11, "bold"))
-        self.chat_text.tag_configure("assistant", foreground="#0f172a", font=("Segoe UI", 11))
-        self.chat_text.tag_configure("system", foreground="#64748b", font=("Segoe UI", 10, "italic"))
+        self.chat_text.tag_configure("user", foreground="#3b82f6", font=("Segoe UI", 11, "bold"))
+        self.chat_text.tag_configure("assistant", foreground="#f8fafc", font=("Segoe UI", 11))
+        self.chat_text.tag_configure("system", foreground="#94a3b8", font=("Segoe UI", 10, "italic"))
         self.chat_text.tag_configure("error", foreground="#ef4444", font=("Segoe UI", 11, "bold"))
         self.chat_text.pack(fill=BOTH, expand=True, pady=(0, 10))
 
@@ -267,10 +278,16 @@ class HanzAuditApp(tb.Window):
         self._busy = busy
         if busy:
             self._set_status_indicator("busy")
+            self.progress.pack(side=LEFT, padx=(20, 0))
+            self.progress.start(10)
         elif self.ssh and self.ssh.connected:
             self._set_status_indicator("ok")
+            self.progress.stop()
+            self.progress.pack_forget()
         else:
             self._set_status_indicator("idle")
+            self.progress.stop()
+            self.progress.pack_forget()
         if not self._connecting:
             self.btn_connect.config(
                 state=DISABLED if busy else NORMAL
